@@ -4,14 +4,12 @@ import { MessageCircleQuestion, Settings2 } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 
 import { ConnectionSwitcher } from '@/components/connection-switcher'
-import { ModeToggle } from '@/components/mode-toggle'
 import { QueryHistory } from '@/components/query-history'
 import { SchemaExplorer } from '@/components/schema-explorer'
 import { SidebarQuickQuery } from '@/components/sidebar-quick-query'
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
@@ -72,11 +70,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-
-      {/* Footer - Theme Toggle */}
-      <SidebarFooter>
-        <ModeToggle />
-      </SidebarFooter>
 
       <SidebarRail />
     </Sidebar>

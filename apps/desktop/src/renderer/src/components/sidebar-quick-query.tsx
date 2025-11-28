@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Play, Send, ChevronDown, Loader2, Clock } from 'lucide-react'
+import { Play, Send, ChevronDown, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Collapsible,
@@ -17,19 +17,18 @@ import {
   SidebarMenuItem
 } from '@/components/ui/sidebar'
 import { SQLEditor } from '@/components/sql-editor'
-import { useQueryStore, useConnectionStore } from '@/stores'
+import { useQueryStore, useConnectionStore, useTabStore } from '@/stores'
 import { cn } from '@/lib/utils'
 
 export function SidebarQuickQuery() {
   const [isOpen, setIsOpen] = React.useState(true)
   const [quickQuery, setQuickQuery] = React.useState('')
-  const [isRunning, setIsRunning] = React.useState(false)
 
   const activeConnection = useConnectionStore((s) => s.getActiveConnection())
   const schemas = useConnectionStore((s) => s.schemas)
   const { history } = useQueryStore()
-  const setCurrentQuery = useQueryStore((s) => s.setCurrentQuery)
-  const addToHistory = useQueryStore((s) => s.addToHistory)
+
+  const createQueryTab = useTabStore((s) => s.createQueryTab)
 
   // Get recent 3 queries for quick access
   const recentQueries = React.useMemo(() => {
@@ -44,33 +43,23 @@ export function SidebarQuickQuery() {
   }, [history])
 
   const handleRunQuickQuery = () => {
-    if (!activeConnection || !quickQuery.trim() || isRunning) return
-
-    setIsRunning(true)
-    const startTime = Date.now()
-
-    setTimeout(() => {
-      const durationMs = Date.now() - startTime + Math.random() * 50
-      addToHistory({
-        query: quickQuery,
-        durationMs: Math.round(durationMs),
-        rowCount: Math.floor(Math.random() * 100),
-        status: 'success',
-        connectionId: activeConnection.id
-      })
-      setIsRunning(false)
-      setQuickQuery('')
-    }, 300 + Math.random() * 200)
+    if (!activeConnection || !quickQuery.trim()) return
+    // Create a new query tab with the query
+    createQueryTab(activeConnection.id, quickQuery)
+    setQuickQuery('')
   }
 
   const handleSendToMainEditor = () => {
-    if (!quickQuery.trim()) return
-    setCurrentQuery(quickQuery)
+    if (!quickQuery.trim() || !activeConnection) return
+    // Create a new query tab with the query
+    createQueryTab(activeConnection.id, quickQuery)
     setQuickQuery('')
   }
 
   const handleUseRecentQuery = (query: string) => {
-    setCurrentQuery(query)
+    if (!activeConnection) return
+    // Create a new query tab with the recent query
+    createQueryTab(activeConnection.id, query)
   }
 
   return (
@@ -109,15 +98,11 @@ export function SidebarQuickQuery() {
                 <Button
                   size="sm"
                   className="flex-1 h-7 gap-1.5 text-xs"
-                  disabled={!activeConnection || !quickQuery.trim() || isRunning}
+                  disabled={!activeConnection || !quickQuery.trim()}
                   onClick={handleRunQuickQuery}
                 >
-                  {isRunning ? (
-                    <Loader2 className="size-3 animate-spin" />
-                  ) : (
-                    <Play className="size-3" />
-                  )}
-                  Run
+                  <Play className="size-3" />
+                  New Tab
                 </Button>
                 <Button
                   variant="outline"

@@ -1,0 +1,428 @@
+import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
+import type { Connection } from './connection-store'
+import type { QueryResult } from './query-store'
+
+// Tab type discriminator
+export type TabType = 'query' | 'table-preview'
+
+// Base tab interface
+interface BaseTab {
+  id: string
+  type: TabType
+  title: string
+  isPinned: boolean
+  connectionId: string | null
+  createdAt: number
+  order: number
+}
+
+// Query tab specific state
+export interface QueryTab extends BaseTab {
+  type: 'query'
+  query: string
+  savedQuery: string // Last saved/executed query for dirty detection
+  result: QueryResult | null
+  error: string | null
+  isExecuting: boolean
+  currentPage: number
+  pageSize: number
+}
+
+// Table preview tab
+export interface TablePreviewTab extends BaseTab {
+  type: 'table-preview'
+  schemaName: string
+  tableName: string
+  query: string
+  savedQuery: string
+  result: QueryResult | null
+  error: string | null
+  isExecuting: boolean
+  currentPage: number
+  pageSize: number
+}
+
+export type Tab = QueryTab | TablePreviewTab
+
+// Persisted tab data (minimal for storage)
+interface PersistedTab {
+  id: string
+  type: TabType
+  title: string
+  isPinned: boolean
+  connectionId: string | null
+  order: number
+  query?: string
+  schemaName?: string
+  tableName?: string
+}
+
+interface TabState {
+  // Tab collection
+  tabs: Tab[]
+  activeTabId: string | null
+
+  // Actions
+  createQueryTab: (connectionId: string | null, initialQuery?: string) => string
+  createTablePreviewTab: (
+    connectionId: string,
+    schemaName: string,
+    tableName: string
+  ) => string
+  closeTab: (tabId: string) => void
+  closeAllTabs: () => void
+  closeOtherTabs: (tabId: string) => void
+  closeTabsToRight: (tabId: string) => void
+
+  setActiveTab: (tabId: string) => void
+  updateTabQuery: (tabId: string, query: string) => void
+  updateTabResult: (
+    tabId: string,
+    result: QueryResult | null,
+    error: string | null
+  ) => void
+  updateTabExecuting: (tabId: string, isExecuting: boolean) => void
+  markTabSaved: (tabId: string) => void
+
+  // Pagination per tab
+  setTabPage: (tabId: string, page: number) => void
+  setTabPageSize: (tabId: string, size: number) => void
+
+  // Pinning
+  pinTab: (tabId: string) => void
+  unpinTab: (tabId: string) => void
+
+  // Reordering
+  reorderTabs: (startIndex: number, endIndex: number) => void
+
+  // Tab title
+  renameTab: (tabId: string, title: string) => void
+
+  // Computed helpers
+  getTab: (tabId: string) => Tab | undefined
+  getActiveTab: () => Tab | undefined
+  getPinnedTabs: () => Tab[]
+  getUnpinnedTabs: () => Tab[]
+  isTabDirty: (tabId: string) => boolean
+  getTabPaginatedRows: (tabId: string) => Record<string, unknown>[]
+  getTabTotalPages: (tabId: string) => number
+}
+
+export const useTabStore = create<TabState>()(
+  persist(
+    (set, get) => ({
+      tabs: [],
+      activeTabId: null,
+
+      createQueryTab: (connectionId, initialQuery = '') => {
+        const id = crypto.randomUUID()
+        const tabs = get().tabs
+        const maxOrder = tabs.length > 0 ? Math.max(...tabs.map((t) => t.order)) : -1
+
+        const newTab: QueryTab = {
+          id,
+          type: 'query',
+          title: 'New Query',
+          isPinned: false,
+          connectionId,
+          createdAt: Date.now(),
+          order: maxOrder + 1,
+          query: initialQuery,
+          savedQuery: initialQuery,
+          result: null,
+          error: null,
+          isExecuting: false,
+          currentPage: 1,
+          pageSize: 100
+        }
+
+        set((state) => ({
+          tabs: [...state.tabs, newTab],
+          activeTabId: id
+        }))
+
+        return id
+      },
+
+      createTablePreviewTab: (connectionId, schemaName, tableName) => {
+        // Always create a new tab (no deduplication per user preference)
+        const id = crypto.randomUUID()
+        const tabs = get().tabs
+        const maxOrder = tabs.length > 0 ? Math.max(...tabs.map((t) => t.order)) : -1
+        const tableRef = schemaName === 'public' ? tableName : `${schemaName}.${tableName}`
+        const query = `SELECT * FROM ${tableRef} LIMIT 100;`
+
+        const newTab: TablePreviewTab = {
+          id,
+          type: 'table-preview',
+          title: tableName,
+          isPinned: false,
+          connectionId,
+          createdAt: Date.now(),
+          order: maxOrder + 1,
+          schemaName,
+          tableName,
+          query,
+          savedQuery: query,
+          result: null,
+          error: null,
+          isExecuting: false,
+          currentPage: 1,
+          pageSize: 100
+        }
+
+        set((state) => ({
+          tabs: [...state.tabs, newTab],
+          activeTabId: id
+        }))
+
+        return id
+      },
+
+      closeTab: (tabId) => {
+        const tab = get().tabs.find((t) => t.id === tabId)
+        if (!tab || tab.isPinned) return
+
+        set((state) => {
+          const newTabs = state.tabs.filter((t) => t.id !== tabId)
+          let newActiveId = state.activeTabId
+
+          if (state.activeTabId === tabId) {
+            // Select adjacent tab
+            const closedIndex = state.tabs.findIndex((t) => t.id === tabId)
+            newActiveId = newTabs[closedIndex]?.id ?? newTabs[closedIndex - 1]?.id ?? null
+          }
+
+          return { tabs: newTabs, activeTabId: newActiveId }
+        })
+      },
+
+      closeAllTabs: () => {
+        set((state) => {
+          // Keep pinned tabs
+          const pinnedTabs = state.tabs.filter((t) => t.isPinned)
+          return {
+            tabs: pinnedTabs,
+            activeTabId: pinnedTabs[0]?.id ?? null
+          }
+        })
+      },
+
+      closeOtherTabs: (tabId) => {
+        set((state) => {
+          // Keep the specified tab and all pinned tabs
+          const keptTabs = state.tabs.filter((t) => t.id === tabId || t.isPinned)
+          return {
+            tabs: keptTabs,
+            activeTabId: tabId
+          }
+        })
+      },
+
+      closeTabsToRight: (tabId) => {
+        set((state) => {
+          const tabIndex = state.tabs.findIndex((t) => t.id === tabId)
+          if (tabIndex === -1) return state
+
+          const keptTabs = state.tabs.filter(
+            (t, i) => i <= tabIndex || t.isPinned
+          )
+          return {
+            tabs: keptTabs,
+            activeTabId: state.activeTabId
+          }
+        })
+      },
+
+      setActiveTab: (tabId) => {
+        set({ activeTabId: tabId })
+      },
+
+      updateTabQuery: (tabId, query) => {
+        set((state) => ({
+          tabs: state.tabs.map((t) =>
+            t.id === tabId ? { ...t, query } : t
+          )
+        }))
+      },
+
+      updateTabResult: (tabId, result, error) => {
+        set((state) => ({
+          tabs: state.tabs.map((t) =>
+            t.id === tabId
+              ? { ...t, result, error, currentPage: 1 }
+              : t
+          )
+        }))
+      },
+
+      updateTabExecuting: (tabId, isExecuting) => {
+        set((state) => ({
+          tabs: state.tabs.map((t) =>
+            t.id === tabId ? { ...t, isExecuting } : t
+          )
+        }))
+      },
+
+      markTabSaved: (tabId) => {
+        set((state) => ({
+          tabs: state.tabs.map((t) =>
+            t.id === tabId ? { ...t, savedQuery: t.query } : t
+          )
+        }))
+      },
+
+      setTabPage: (tabId, page) => {
+        set((state) => ({
+          tabs: state.tabs.map((t) =>
+            t.id === tabId ? { ...t, currentPage: page } : t
+          )
+        }))
+      },
+
+      setTabPageSize: (tabId, size) => {
+        set((state) => ({
+          tabs: state.tabs.map((t) =>
+            t.id === tabId ? { ...t, pageSize: size, currentPage: 1 } : t
+          )
+        }))
+      },
+
+      pinTab: (tabId) => {
+        set((state) => {
+          const updatedTabs = state.tabs.map((t) =>
+            t.id === tabId ? { ...t, isPinned: true } : t
+          )
+          // Sort: pinned tabs first, then by order
+          return {
+            tabs: updatedTabs.sort((a, b) => {
+              if (a.isPinned && !b.isPinned) return -1
+              if (!a.isPinned && b.isPinned) return 1
+              return a.order - b.order
+            })
+          }
+        })
+      },
+
+      unpinTab: (tabId) => {
+        set((state) => ({
+          tabs: state.tabs.map((t) =>
+            t.id === tabId ? { ...t, isPinned: false } : t
+          )
+        }))
+      },
+
+      reorderTabs: (startIndex, endIndex) => {
+        set((state) => {
+          const tabs = [...state.tabs]
+          const [removed] = tabs.splice(startIndex, 1)
+          tabs.splice(endIndex, 0, removed)
+
+          // Update order values
+          return {
+            tabs: tabs.map((t, i) => ({ ...t, order: i }))
+          }
+        })
+      },
+
+      renameTab: (tabId, title) => {
+        set((state) => ({
+          tabs: state.tabs.map((t) =>
+            t.id === tabId ? { ...t, title } : t
+          )
+        }))
+      },
+
+      getTab: (tabId) => {
+        return get().tabs.find((t) => t.id === tabId)
+      },
+
+      getActiveTab: () => {
+        const { tabs, activeTabId } = get()
+        return tabs.find((t) => t.id === activeTabId)
+      },
+
+      getPinnedTabs: () => {
+        return get().tabs.filter((t) => t.isPinned)
+      },
+
+      getUnpinnedTabs: () => {
+        return get().tabs.filter((t) => !t.isPinned)
+      },
+
+      isTabDirty: (tabId) => {
+        const tab = get().tabs.find((t) => t.id === tabId)
+        if (!tab) return false
+        return tab.query !== tab.savedQuery
+      },
+
+      getTabPaginatedRows: (tabId) => {
+        const tab = get().tabs.find((t) => t.id === tabId)
+        if (!tab || !tab.result) return []
+        const start = (tab.currentPage - 1) * tab.pageSize
+        return tab.result.rows.slice(start, start + tab.pageSize)
+      },
+
+      getTabTotalPages: (tabId) => {
+        const tab = get().tabs.find((t) => t.id === tabId)
+        if (!tab || !tab.result) return 0
+        return Math.ceil(tab.result.rowCount / tab.pageSize)
+      }
+    }),
+    {
+      name: 'data-peek-tabs',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        // Only persist pinned tabs
+        tabs: state.tabs
+          .filter((t) => t.isPinned)
+          .map(
+            (t): PersistedTab => ({
+              id: t.id,
+              type: t.type,
+              title: t.title,
+              isPinned: t.isPinned,
+              connectionId: t.connectionId,
+              order: t.order,
+              query: t.query,
+              schemaName: t.type === 'table-preview' ? t.schemaName : undefined,
+              tableName: t.type === 'table-preview' ? t.tableName : undefined
+            })
+          ),
+        activeTabId: state.activeTabId
+      }),
+      onRehydrate: () => (state) => {
+        // Restore pinned tabs with full state on app load
+        if (state) {
+          state.tabs = state.tabs.map((t) => {
+            const base = {
+              ...t,
+              result: null,
+              error: null,
+              isExecuting: false,
+              savedQuery: t.query ?? '',
+              createdAt: Date.now(),
+              currentPage: 1,
+              pageSize: 100
+            }
+
+            if (t.type === 'table-preview') {
+              return {
+                ...base,
+                type: 'table-preview' as const,
+                schemaName: (t as unknown as TablePreviewTab).schemaName ?? '',
+                tableName: (t as unknown as TablePreviewTab).tableName ?? ''
+              }
+            }
+
+            return {
+              ...base,
+              type: 'query' as const
+            }
+          }) as Tab[]
+        }
+      }
+    }
+  )
+)

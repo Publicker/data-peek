@@ -28,7 +28,7 @@ import {
   SidebarMenuSubItem
 } from '@/components/ui/sidebar'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { useConnectionStore, useQueryStore } from '@/stores'
+import { useConnectionStore, useTabStore } from '@/stores'
 import type { TableInfo } from '@shared/index'
 
 function DataTypeBadge({ type }: { type: string }) {
@@ -62,8 +62,10 @@ export function SchemaExplorer() {
   const isLoadingSchema = useConnectionStore((s) => s.isLoadingSchema)
   const schemaError = useConnectionStore((s) => s.schemaError)
   const activeConnectionId = useConnectionStore((s) => s.activeConnectionId)
+  const getActiveConnection = useConnectionStore((s) => s.getActiveConnection)
   const fetchSchemas = useConnectionStore((s) => s.fetchSchemas)
-  const loadTableData = useQueryStore((s) => s.loadTableData)
+
+  const createTablePreviewTab = useTabStore((s) => s.createTablePreviewTab)
 
   const [expandedSchemas, setExpandedSchemas] = React.useState<Set<string>>(
     new Set(schemas.map((s) => s.name))
@@ -101,8 +103,10 @@ export function SchemaExplorer() {
   }
 
   const handleTableClick = (schemaName: string, table: TableInfo) => {
-    if (!activeConnectionId) return
-    loadTableData(schemaName, table, activeConnectionId)
+    const connection = getActiveConnection()
+    if (!connection) return
+    // Create a new table preview tab (always creates new per user preference)
+    createTablePreviewTab(connection.id, schemaName, table.name)
   }
 
   const handleRefresh = () => {

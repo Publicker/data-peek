@@ -27,30 +27,20 @@ export function QueryEditor() {
   const schemas = useConnectionStore((s) => s.schemas)
   const { currentQuery, isExecuting, result, error } = useQueryStore()
   const setCurrentQuery = useQueryStore((s) => s.setCurrentQuery)
-  const setIsExecuting = useQueryStore((s) => s.setIsExecuting)
-  const addToHistory = useQueryStore((s) => s.addToHistory)
+  const executeQuery = useQueryStore((s) => s.executeQuery)
 
   const handleRunQuery = () => {
-    if (!activeConnection || isExecuting || !currentQuery.trim()) return
+    console.log('[QueryEditor] handleRunQuery called')
+    console.log('[QueryEditor] activeConnection:', activeConnection)
+    console.log('[QueryEditor] isExecuting:', isExecuting)
+    console.log('[QueryEditor] currentQuery:', currentQuery)
 
-    setIsExecuting(true)
-
-    // Simulate query execution (in real app, this would be IPC call)
-    const startTime = Date.now()
-    setTimeout(() => {
-      const durationMs = Date.now() - startTime + Math.random() * 50
-
-      // Add to history
-      addToHistory({
-        query: currentQuery,
-        durationMs: Math.round(durationMs),
-        rowCount: result?.rowCount ?? 0,
-        status: 'success',
-        connectionId: activeConnection.id
-      })
-
-      setIsExecuting(false)
-    }, 300 + Math.random() * 200)
+    if (!activeConnection || isExecuting || !currentQuery.trim()) {
+      console.log('[QueryEditor] Skipping - conditions not met')
+      return
+    }
+    console.log('[QueryEditor] Calling executeQuery...')
+    executeQuery(activeConnection)
   }
 
   const handleFormatQuery = () => {

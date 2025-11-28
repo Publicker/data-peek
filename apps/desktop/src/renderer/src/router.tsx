@@ -5,13 +5,15 @@ import {
   Outlet,
   Link
 } from '@tanstack/react-router'
-import { ThemeProvider } from '@/components/theme-provider'
+import { Moon, Sun, Monitor } from 'lucide-react'
+import { ThemeProvider, useTheme } from '@/components/theme-provider'
 import { AppSidebar } from '@/components/app-sidebar'
 import { NavActions } from '@/components/nav-actions'
 import { Separator } from '@/components/ui/separator'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
-import { QueryEditor } from '@/components/query-editor'
+import { TabContainer } from '@/components/tab-container'
 import { useConnectionStore } from '@/stores'
+import { cn } from '@/lib/utils'
 
 // Root Layout
 function RootLayout() {
@@ -54,10 +56,51 @@ function RootLayout() {
   )
 }
 
+// Theme Option Component
+function ThemeOption({
+  value,
+  label,
+  icon: Icon,
+  currentTheme,
+  onSelect
+}: {
+  value: 'light' | 'dark' | 'system'
+  label: string
+  icon: typeof Sun
+  currentTheme: string
+  onSelect: (theme: 'light' | 'dark' | 'system') => void
+}) {
+  const isSelected = currentTheme === value
+
+  return (
+    <button
+      onClick={() => onSelect(value)}
+      className={cn(
+        'flex flex-col items-center gap-2 rounded-lg border-2 p-4 transition-all',
+        isSelected
+          ? 'border-primary bg-primary/5'
+          : 'border-border/50 hover:border-border hover:bg-muted/50'
+      )}
+    >
+      <div
+        className={cn(
+          'flex size-12 items-center justify-center rounded-full',
+          isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+        )}
+      >
+        <Icon className="size-6" />
+      </div>
+      <span className={cn('text-sm font-medium', isSelected && 'text-primary')}>{label}</span>
+    </button>
+  )
+}
+
 // Settings Page
 function SettingsPage() {
+  const { theme, setTheme } = useTheme()
+
   return (
-    <div className="flex flex-1 flex-col p-6">
+    <div className="flex flex-1 flex-col p-6 overflow-auto">
       <div className="flex items-center gap-4 mb-6">
         <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors">
           ← Back
@@ -65,18 +108,46 @@ function SettingsPage() {
         <h1 className="text-2xl font-semibold">Settings</h1>
       </div>
       <div className="space-y-6 max-w-2xl">
+        {/* Appearance */}
         <div className="rounded-lg border border-border/50 bg-card p-4">
-          <h2 className="text-lg font-medium mb-2">General</h2>
-          <p className="text-sm text-muted-foreground">
-            Application settings will be available here in a future update.
+          <h2 className="text-lg font-medium mb-2">Appearance</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Choose your preferred theme for the application.
           </p>
+          <div className="grid grid-cols-3 gap-3">
+            <ThemeOption
+              value="light"
+              label="Light"
+              icon={Sun}
+              currentTheme={theme}
+              onSelect={setTheme}
+            />
+            <ThemeOption
+              value="dark"
+              label="Dark"
+              icon={Moon}
+              currentTheme={theme}
+              onSelect={setTheme}
+            />
+            <ThemeOption
+              value="system"
+              label="System"
+              icon={Monitor}
+              currentTheme={theme}
+              onSelect={setTheme}
+            />
+          </div>
         </div>
+
+        {/* Connections */}
         <div className="rounded-lg border border-border/50 bg-card p-4">
           <h2 className="text-lg font-medium mb-2">Connections</h2>
           <p className="text-sm text-muted-foreground">
             Manage your database connections and credentials.
           </p>
         </div>
+
+        {/* Editor */}
         <div className="rounded-lg border border-border/50 bg-card p-4">
           <h2 className="text-lg font-medium mb-2">Editor</h2>
           <p className="text-sm text-muted-foreground">
@@ -96,7 +167,7 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: QueryEditor
+  component: TabContainer
 })
 
 const settingsRoute = createRoute({

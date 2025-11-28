@@ -94,12 +94,20 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle('db:query', async (_, { config, query }) => {
+    console.log('[main:db:query] Received query request')
+    console.log('[main:db:query] Config:', { ...config, password: '***' })
+    console.log('[main:db:query] Query:', query)
+
     try {
       const client = new Client(config)
+      console.log('[main:db:query] Connecting...')
       await client.connect()
+      console.log('[main:db:query] Connected, executing query...')
       const start = Date.now()
       const res = await client.query(query)
       const duration = Date.now() - start
+      console.log('[main:db:query] Query completed in', duration, 'ms')
+      console.log('[main:db:query] Rows:', res.rowCount)
       await client.end()
 
       return {
@@ -112,6 +120,7 @@ app.whenReady().then(async () => {
         }
       }
     } catch (error: unknown) {
+      console.error('[main:db:query] Error:', error)
       const errorMessage = error instanceof Error ? error.message : String(error)
       return { success: false, error: errorMessage }
     }

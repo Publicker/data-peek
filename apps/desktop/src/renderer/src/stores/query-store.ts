@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { Column, Table } from './connection-store'
+import type { Column, Table, Connection } from './connection-store'
+import type { QueryResult as IpcQueryResult } from '@data-peek/shared'
 
 export interface QueryHistoryItem {
   id: string
@@ -43,7 +44,10 @@ interface QueryState {
   setError: (error: string | null) => void
 
   // Load table data (for clicking on tables)
-  loadTableData: (schemaName: string, table: Table, connectionId: string) => void
+  loadTableData: (schemaName: string, table: Table, connection: Connection) => void
+
+  // Execute a query against the database
+  executeQuery: (connection: Connection, query?: string) => Promise<void>
 
   addToHistory: (item: Omit<QueryHistoryItem, 'id' | 'timestamp'>) => void
   clearHistory: () => void
@@ -55,6 +59,46 @@ interface QueryState {
   // Computed
   getTotalPages: () => number
   getPaginatedRows: () => Record<string, unknown>[]
+}
+
+// PostgreSQL data type OID to name mapping (common types)
+function getDataTypeName(dataTypeID: number): string {
+  const typeMap: Record<number, string> = {
+    16: 'boolean',
+    17: 'bytea',
+    18: 'char',
+    19: 'name',
+    20: 'bigint',
+    21: 'smallint',
+    23: 'integer',
+    24: 'regproc',
+    25: 'text',
+    26: 'oid',
+    114: 'json',
+    142: 'xml',
+    700: 'real',
+    701: 'double precision',
+    790: 'money',
+    1042: 'char',
+    1043: 'varchar',
+    1082: 'date',
+    1083: 'time',
+    1114: 'timestamp',
+    1184: 'timestamptz',
+    1186: 'interval',
+    1560: 'bit',
+    1562: 'varbit',
+    1700: 'numeric',
+    2950: 'uuid',
+    3802: 'jsonb',
+    3904: 'int4range',
+    3906: 'numrange',
+    3908: 'tsrange',
+    3910: 'tstzrange',
+    3912: 'daterange',
+    3926: 'int8range'
+  }
+  return typeMap[dataTypeID] ?? `unknown(${dataTypeID})`
 }
 
 // Generate sample data based on column type
@@ -186,44 +230,102 @@ export const useQueryStore = create<QueryState>((set, get) => ({
   setResult: (result) => set({ result, error: null, currentPage: 1 }),
   setError: (error) => set({ error, result: null }),
 
-  loadTableData: (schemaName, table, connectionId) => {
+  loadTableData: (schemaName, table, connection) => {
     const tableRef = schemaName === 'public' ? table.name : `${schemaName}.${table.name}`
     const query = `SELECT * FROM ${tableRef} LIMIT 100;`
 
-    set({ isExecuting: true, currentQuery: query })
+    set({ currentQuery: query })
 
-    // Simulate loading time
-    const startTime = Date.now()
-    setTimeout(() => {
-      const durationMs = Date.now() - startTime + Math.floor(Math.random() * 30)
-      const rows = generateSampleRows(table.columns, 25 + Math.floor(Math.random() * 75))
+    // Execute the query
+    get().executeQuery(connection, query)
+  },
 
-      const result: QueryResult = {
-        columns: table.columns.map((c) => ({ name: c.name, dataType: c.dataType })),
-        rows,
-        rowCount: rows.length,
-        durationMs,
-        tableName: tableRef
+  executeQuery: async (connection, queryOverride) => {
+    const query = queryOverride ?? get().currentQuery
+    console.log('[executeQuery] Starting with query:', query)
+    console.log('[executeQuery] Connection:', connection)
+
+    if (!query.trim()) {
+      console.log('[executeQuery] Empty query, returning')
+      return
+    }
+
+    set({ isExecuting: true, error: null })
+
+    try {
+      console.log('[executeQuery] Calling window.api.db.query...')
+      const response = await window.api.db.query(connection, query)
+      console.log('[executeQuery] Response:', response)
+
+      if (response.success && response.data) {
+        const data = response.data as IpcQueryResult
+        console.log('[executeQuery] Success! Data:', data)
+
+        // Map the IPC result to our QueryResult format
+        const result: QueryResult = {
+          columns: data.fields.map((f) => ({
+            name: f.name,
+            dataType: getDataTypeName(f.dataTypeID)
+          })),
+          rows: data.rows,
+          rowCount: data.rowCount ?? data.rows.length,
+          durationMs: data.durationMs
+        }
+        console.log('[executeQuery] Mapped result:', result)
+
+        // Add to history
+        const history = get().history
+        const newHistoryItem: QueryHistoryItem = {
+          id: crypto.randomUUID(),
+          query,
+          timestamp: new Date(),
+          durationMs: data.durationMs,
+          rowCount: result.rowCount,
+          status: 'success',
+          connectionId: connection.id
+        }
+
+        set({
+          isExecuting: false,
+          result,
+          error: null,
+          history: [newHistoryItem, ...history].slice(0, 100)
+        })
+      } else {
+        // Query failed
+        const errorMessage = response.error ?? 'Query execution failed'
+        console.log('[executeQuery] Query failed:', errorMessage)
+
+        // Add to history as error
+        const history = get().history
+        const newHistoryItem: QueryHistoryItem = {
+          id: crypto.randomUUID(),
+          query,
+          timestamp: new Date(),
+          durationMs: 0,
+          rowCount: 0,
+          status: 'error',
+          connectionId: connection.id,
+          errorMessage
+        }
+
+        set({
+          isExecuting: false,
+          result: null,
+          error: errorMessage,
+          history: [newHistoryItem, ...history].slice(0, 100)
+        })
       }
+    } catch (error) {
+      console.error('[executeQuery] Exception caught:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
 
-      // Add to history
-      const history = get().history
-      const newHistoryItem: QueryHistoryItem = {
-        id: crypto.randomUUID(),
-        query,
-        timestamp: new Date(),
-        durationMs,
-        rowCount: rows.length,
-        status: 'success',
-        connectionId
-      }
       set({
         isExecuting: false,
-        result,
-        error: null,
-        history: [newHistoryItem, ...history].slice(0, 100)
+        result: null,
+        error: errorMessage
       })
-    }, 200 + Math.random() * 300)
+    }
   },
 
   addToHistory: (item) =>
