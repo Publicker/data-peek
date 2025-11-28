@@ -1,0 +1,216 @@
+import {
+  Zap,
+  Keyboard,
+  Eye,
+  Shield,
+  Moon,
+  Database,
+  Code2,
+  Table2,
+  GitBranch,
+  Pencil,
+  FileJson,
+  Clock,
+} from 'lucide-react'
+
+const features = [
+  {
+    icon: Zap,
+    title: 'Lightning Fast',
+    description: 'Opens in under 2 seconds. No splash screens, no waiting. Just you and your data.',
+    color: '#fbbf24',
+  },
+  {
+    icon: Keyboard,
+    title: 'Keyboard-First',
+    description: 'Power users can do everything without touching the mouse. Cmd+Enter to run, done.',
+    color: '#22d3ee',
+  },
+  {
+    icon: Code2,
+    title: 'Monaco Editor',
+    description: 'The same editor engine that powers VS Code. Syntax highlighting, autocomplete, formatting.',
+    color: '#a855f7',
+  },
+  {
+    icon: Table2,
+    title: 'Smart Results',
+    description: 'Sortable tables, type indicators, pagination, and one-click cell copying.',
+    color: '#4ade80',
+  },
+  {
+    icon: GitBranch,
+    title: 'ER Diagrams',
+    description: 'Visualize your schema with interactive diagrams. See relationships at a glance.',
+    color: '#f472b6',
+  },
+  {
+    icon: Pencil,
+    title: 'Inline Editing',
+    description: 'Double-click to edit. Add, update, delete rows directly. Preview SQL before commit.',
+    color: '#fb923c',
+  },
+  {
+    icon: Eye,
+    title: 'Query Plans',
+    description: 'EXPLAIN ANALYZE visualized. See exactly how PostgreSQL executes your queries.',
+    color: '#60a5fa',
+  },
+  {
+    icon: Clock,
+    title: 'Query History',
+    description: 'Every query saved automatically. Search, filter, and re-run past queries instantly.',
+    color: '#c084fc',
+  },
+  {
+    icon: FileJson,
+    title: 'Export Anywhere',
+    description: 'CSV, JSON, copy as SQL. Get your data out in the format you need.',
+    color: '#2dd4bf',
+  },
+  {
+    icon: Moon,
+    title: 'Dark & Light',
+    description: 'Beautiful themes that match your system preference. Easy on the eyes, day or night.',
+    color: '#94a3b8',
+  },
+  {
+    icon: Shield,
+    title: 'Privacy-First',
+    description: 'No telemetry, no tracking, no cloud. Your credentials stay encrypted on your machine.',
+    color: '#4ade80',
+  },
+  {
+    icon: Database,
+    title: 'PostgreSQL Native',
+    description: 'Built specifically for PostgreSQL. Every feature optimized for Postgres workflows.',
+    color: '#22d3ee',
+  },
+]
+
+export function Features() {
+  return (
+    <section id="features" className="relative py-32 overflow-hidden">
+      {/* Background */}
+      <div className="absolute inset-0 grid-pattern opacity-50" />
+
+      <div className="relative z-10 max-w-7xl mx-auto px-6">
+        {/* Section Header */}
+        <div className="text-center mb-20">
+          <p
+            className="text-xs uppercase tracking-[0.2em] text-[--color-accent] mb-4"
+            style={{ fontFamily: 'var(--font-mono)' }}
+          >
+            Features
+          </p>
+          <h2
+            className="text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight mb-6"
+            style={{ fontFamily: 'var(--font-display)' }}
+          >
+            Everything you need.
+            <br />
+            <span className="text-[--color-text-secondary]">Nothing you don&apos;t.</span>
+          </h2>
+          <p
+            className="text-lg text-[--color-text-secondary] max-w-2xl mx-auto"
+            style={{ fontFamily: 'var(--font-body)' }}
+          >
+            Built for developers who want to query their database, not fight their tools.
+          </p>
+        </div>
+
+        {/* Features Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {features.map((feature, index) => (
+            <div
+              key={feature.title}
+              className="group relative p-6 rounded-2xl bg-[--color-surface] border border-[--color-border] hover:border-[--color-border] hover:bg-[--color-surface-elevated] transition-all duration-300 hover:-translate-y-1"
+              style={{
+                animationDelay: `${index * 50}ms`,
+              }}
+            >
+              {/* Icon */}
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110"
+                style={{
+                  backgroundColor: `${feature.color}15`,
+                  border: `1px solid ${feature.color}30`,
+                }}
+              >
+                <feature.icon
+                  className="w-5 h-5"
+                  style={{ color: feature.color }}
+                />
+              </div>
+
+              {/* Content */}
+              <h3
+                className="text-lg font-medium mb-2"
+                style={{ fontFamily: 'var(--font-display)' }}
+              >
+                {feature.title}
+              </h3>
+              <p
+                className="text-sm text-[--color-text-secondary] leading-relaxed"
+                style={{ fontFamily: 'var(--font-body)' }}
+              >
+                {feature.description}
+              </p>
+
+              {/* Hover Glow */}
+              <div
+                className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"
+                style={{
+                  background: `radial-gradient(circle at center, ${feature.color}08 0%, transparent 70%)`,
+                }}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Feature Screenshots */}
+        <div className="mt-24 grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Query Editor Screenshot */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-[--color-accent]/10 border border-[--color-accent]/20 flex items-center justify-center">
+                <Code2 className="w-4 h-4 text-[--color-accent]" />
+              </div>
+              <h3
+                className="text-lg font-medium"
+                style={{ fontFamily: 'var(--font-display)' }}
+              >
+                Query Editor
+              </h3>
+            </div>
+            <div className="screenshot-placeholder min-h-[300px] rounded-xl">
+              <div className="flex flex-col items-center gap-2 z-10">
+                <span>screenshot_editor.png</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ER Diagram Screenshot */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-[#f472b6]/10 border border-[#f472b6]/20 flex items-center justify-center">
+                <GitBranch className="w-4 h-4 text-[#f472b6]" />
+              </div>
+              <h3
+                className="text-lg font-medium"
+                style={{ fontFamily: 'var(--font-display)' }}
+              >
+                ER Diagrams
+              </h3>
+            </div>
+            <div className="screenshot-placeholder min-h-[300px] rounded-xl">
+              <div className="flex flex-col items-center gap-2 z-10">
+                <span>screenshot_erd.png</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}

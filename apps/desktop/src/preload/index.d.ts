@@ -4,7 +4,12 @@ import type {
   IpcResponse,
   DatabaseSchema,
   EditBatch,
-  EditResult
+  EditResult,
+  TableDefinition,
+  AlterTableBatch,
+  DDLResult,
+  SequenceInfo,
+  CustomTypeInfo
 } from '@shared/index'
 
 interface DataPeekApi {
@@ -27,6 +32,30 @@ interface DataPeekApi {
       query: string,
       analyze: boolean
     ) => Promise<IpcResponse<{ plan: unknown; durationMs: number }>>
+  }
+  ddl: {
+    createTable: (
+      config: ConnectionConfig,
+      definition: TableDefinition
+    ) => Promise<IpcResponse<DDLResult>>
+    alterTable: (
+      config: ConnectionConfig,
+      batch: AlterTableBatch
+    ) => Promise<IpcResponse<DDLResult>>
+    dropTable: (
+      config: ConnectionConfig,
+      schema: string,
+      table: string,
+      cascade?: boolean
+    ) => Promise<IpcResponse<DDLResult>>
+    getTableDDL: (
+      config: ConnectionConfig,
+      schema: string,
+      table: string
+    ) => Promise<IpcResponse<TableDefinition>>
+    getSequences: (config: ConnectionConfig) => Promise<IpcResponse<SequenceInfo[]>>
+    getTypes: (config: ConnectionConfig) => Promise<IpcResponse<CustomTypeInfo[]>>
+    previewDDL: (definition: TableDefinition) => Promise<IpcResponse<string>>
   }
   menu: {
     onNewTab: (callback: () => void) => () => void

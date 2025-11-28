@@ -43,6 +43,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { FKPanelStack, type FKPanelItem } from '@/components/fk-panel-stack'
 import { ERDVisualization } from '@/components/erd-visualization'
 import { ExecutionPlanViewer } from '@/components/execution-plan-viewer'
+import { TableDesigner } from '@/components/table-designer'
 
 interface TabQueryEditorProps {
   tabId: string
@@ -89,7 +90,7 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
   const createForeignKeyTab = useTabStore((s) => s.createForeignKeyTab)
 
   const handleRunQuery = useCallback(async () => {
-    if (!tab || tab.type === 'erd' || !tabConnection || tab.isExecuting || !tab.query.trim()) {
+    if (!tab || tab.type === 'erd' || tab.type === 'table-designer' || !tabConnection || tab.isExecuting || !tab.query.trim()) {
       return
     }
 
@@ -144,13 +145,13 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
   }, [tab, tabConnection, tabId, updateTabExecuting, updateTabResult, markTabSaved, addToHistory])
 
   const handleFormatQuery = () => {
-    if (!tab || tab.type === 'erd' || !tab.query.trim()) return
+    if (!tab || tab.type === 'erd' || tab.type === 'table-designer' || !tab.query.trim()) return
     const formatted = formatSQL(tab.query)
     updateTabQuery(tabId, formatted)
   }
 
   const handleExplainQuery = useCallback(async () => {
-    if (!tab || tab.type === 'erd' || !tabConnection || isExplaining || !tab.query.trim()) {
+    if (!tab || tab.type === 'erd' || tab.type === 'table-designer' || !tabConnection || isExplaining || !tab.query.trim()) {
       return
     }
 
@@ -183,7 +184,7 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
 
   // Helper: Look up column info from schema (for FK details)
   const getColumnsWithFKInfo = useCallback((): DataTableColumn[] => {
-    if (!tab || tab.type === 'erd' || !tab.result?.columns) return []
+    if (!tab || tab.type === 'erd' || tab.type === 'table-designer' || !tab.result?.columns) return []
 
     // For table-preview tabs, we can directly look up the columns from schema
     if (tab.type === 'table-preview') {
@@ -224,7 +225,7 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
 
   // Helper: Get columns with full info including isPrimaryKey (for editable table)
   const getColumnsForEditing = useCallback((): EditableDataTableColumn[] => {
-    if (!tab || tab.type === 'erd' || !tab.result?.columns || tab.type !== 'table-preview')
+    if (!tab || tab.type === 'erd' || tab.type === 'table-designer' || !tab.result?.columns || tab.type !== 'table-preview')
       return []
 
     const schema = schemas.find((s) => s.name === tab.schemaName)
@@ -404,7 +405,7 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
 
   // Build a new query with filters/sorting applied
   const buildQueryWithFilters = (): string => {
-    if (!tab || tab.type === 'erd') return ''
+    if (!tab || tab.type === 'erd' || tab.type === 'table-designer') return ''
 
     // For table preview tabs, rebuild from scratch
     if (tab.type === 'table-preview') {
@@ -509,6 +510,11 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
         </div>
       </div>
     )
+  }
+
+  // Render Table Designer for table-designer tabs
+  if (tab.type === 'table-designer') {
+    return <TableDesigner tabId={tabId} />
   }
 
   const paginatedRows = getTabPaginatedRows(tabId)

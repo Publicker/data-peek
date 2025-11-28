@@ -5,7 +5,12 @@ import type {
   IpcResponse,
   DatabaseSchema,
   EditBatch,
-  EditResult
+  EditResult,
+  TableDefinition,
+  AlterTableBatch,
+  DDLResult,
+  SequenceInfo,
+  CustomTypeInfo
 } from '@shared/index'
 
 // Custom APIs for renderer
@@ -39,6 +44,38 @@ const api = {
       analyze: boolean
     ): Promise<IpcResponse<{ plan: unknown; durationMs: number }>> =>
       ipcRenderer.invoke('db:explain', { config, query, analyze })
+  },
+  // DDL operations (Table Designer)
+  ddl: {
+    createTable: (
+      config: ConnectionConfig,
+      definition: TableDefinition
+    ): Promise<IpcResponse<DDLResult>> =>
+      ipcRenderer.invoke('db:create-table', { config, definition }),
+    alterTable: (
+      config: ConnectionConfig,
+      batch: AlterTableBatch
+    ): Promise<IpcResponse<DDLResult>> =>
+      ipcRenderer.invoke('db:alter-table', { config, batch }),
+    dropTable: (
+      config: ConnectionConfig,
+      schema: string,
+      table: string,
+      cascade?: boolean
+    ): Promise<IpcResponse<DDLResult>> =>
+      ipcRenderer.invoke('db:drop-table', { config, schema, table, cascade }),
+    getTableDDL: (
+      config: ConnectionConfig,
+      schema: string,
+      table: string
+    ): Promise<IpcResponse<TableDefinition>> =>
+      ipcRenderer.invoke('db:get-table-ddl', { config, schema, table }),
+    getSequences: (config: ConnectionConfig): Promise<IpcResponse<SequenceInfo[]>> =>
+      ipcRenderer.invoke('db:get-sequences', config),
+    getTypes: (config: ConnectionConfig): Promise<IpcResponse<CustomTypeInfo[]>> =>
+      ipcRenderer.invoke('db:get-types', config),
+    previewDDL: (definition: TableDefinition): Promise<IpcResponse<string>> =>
+      ipcRenderer.invoke('db:preview-ddl', { definition })
   },
   // Menu event listeners
   menu: {

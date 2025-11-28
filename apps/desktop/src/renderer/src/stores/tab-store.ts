@@ -3,7 +3,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import type { QueryResult } from './query-store'
 
 // Tab type discriminator
-export type TabType = 'query' | 'table-preview' | 'erd'
+export type TabType = 'query' | 'table-preview' | 'erd' | 'table-designer'
 
 // Base tab interface
 interface BaseTab {
@@ -47,7 +47,15 @@ export interface ERDTab extends BaseTab {
   type: 'erd'
 }
 
-export type Tab = QueryTab | TablePreviewTab | ERDTab
+// Table Designer tab (create/edit table)
+export interface TableDesignerTab extends BaseTab {
+  type: 'table-designer'
+  schemaName: string
+  tableName?: string // undefined for new table
+  mode: 'create' | 'edit'
+}
+
+export type Tab = QueryTab | TablePreviewTab | ERDTab | TableDesignerTab
 
 // Persisted tab data (minimal for storage)
 interface PersistedTab {
@@ -60,6 +68,7 @@ interface PersistedTab {
   query?: string
   schemaName?: string
   tableName?: string
+  mode?: 'create' | 'edit'
 }
 
 interface TabState {
@@ -78,6 +87,11 @@ interface TabState {
     value: unknown
   ) => string
   createERDTab: (connectionId: string) => string
+  createTableDesignerTab: (
+    connectionId: string,
+    schemaName: string,
+    tableName?: string
+  ) => string
   closeTab: (tabId: string) => void
   closeAllTabs: () => void
   closeOtherTabs: (tabId: string) => void
@@ -117,6 +131,11 @@ interface TabState {
     tableName: string
   ) => Tab | undefined
   findERDTab: (connectionId: string) => Tab | undefined
+  findTableDesignerTab: (
+    connectionId: string,
+    schemaName: string,
+    tableName?: string
+  ) => Tab | undefined
 }
 
 export const useTabStore = create<TabState>()(
@@ -266,6 +285,49 @@ export const useTabStore = create<TabState>()(
         return id
       },
 
+      createTableDesignerTab: (connectionId, schemaName, tableName) => {
+        // For edit mode, check if tab already exists
+        if (tableName) {
+          const existingTab = get().tabs.find(
+            (t) =>
+              t.type === 'table-designer' &&
+              t.connectionId === connectionId &&
+              (t as TableDesignerTab).schemaName === schemaName &&
+              (t as TableDesignerTab).tableName === tableName
+          )
+          if (existingTab) {
+            set({ activeTabId: existingTab.id })
+            return existingTab.id
+          }
+        }
+
+        const id = crypto.randomUUID()
+        const tabs = get().tabs
+        const maxOrder = tabs.length > 0 ? Math.max(...tabs.map((t) => t.order)) : -1
+        const mode = tableName ? 'edit' : 'create'
+        const title = tableName ? `Edit: ${tableName}` : 'New Table'
+
+        const newTab: TableDesignerTab = {
+          id,
+          type: 'table-designer',
+          title,
+          isPinned: false,
+          connectionId,
+          createdAt: Date.now(),
+          order: maxOrder + 1,
+          schemaName,
+          tableName,
+          mode
+        }
+
+        set((state) => ({
+          tabs: [...state.tabs, newTab],
+          activeTabId: id
+        }))
+
+        return id
+      },
+
       closeTab: (tabId) => {
         const tab = get().tabs.find((t) => t.id === tabId)
         if (!tab || tab.isPinned) return
@@ -346,7 +408,9 @@ export const useTabStore = create<TabState>()(
       markTabSaved: (tabId) => {
         set((state) => ({
           tabs: state.tabs.map((t) =>
-            t.id === tabId && t.type !== 'erd' ? { ...t, savedQuery: t.query } : t
+            t.id === tabId && t.type !== 'erd' && t.type !== 'table-designer'
+              ? { ...t, savedQuery: t.query }
+              : t
           )
         }))
       },
@@ -424,14 +488,14 @@ export const useTabStore = create<TabState>()(
       isTabDirty: (tabId) => {
         const tab = get().tabs.find((t) => t.id === tabId)
         if (!tab) return false
-        // ERD tabs are never dirty
-        if (tab.type === 'erd') return false
+        // ERD and table-designer tabs are never dirty (table-designer uses its own store)
+        if (tab.type === 'erd' || tab.type === 'table-designer') return false
         return tab.query !== tab.savedQuery
       },
 
       getTabPaginatedRows: (tabId) => {
         const tab = get().tabs.find((t) => t.id === tabId)
-        if (!tab || tab.type === 'erd') return []
+        if (!tab || tab.type === 'erd' || tab.type === 'table-designer') return []
         if (!tab.result) return []
         const start = (tab.currentPage - 1) * tab.pageSize
         return tab.result.rows.slice(start, start + tab.pageSize)
@@ -439,7 +503,7 @@ export const useTabStore = create<TabState>()(
 
       getTabTotalPages: (tabId) => {
         const tab = get().tabs.find((t) => t.id === tabId)
-        if (!tab || tab.type === 'erd') return 0
+        if (!tab || tab.type === 'erd' || tab.type === 'table-designer') return 0
         if (!tab.result) return 0
         return Math.ceil(tab.result.rowCount / tab.pageSize)
       },
@@ -456,6 +520,18 @@ export const useTabStore = create<TabState>()(
 
       findERDTab: (connectionId) => {
         return get().tabs.find((t) => t.type === 'erd' && t.connectionId === connectionId)
+      },
+
+      findTableDesignerTab: (connectionId, schemaName, tableName) => {
+        return get().tabs.find(
+          (t) =>
+            t.type === 'table-designer' &&
+            t.connectionId === connectionId &&
+            (t as TableDesignerTab).schemaName === schemaName &&
+            (tableName
+              ? (t as TableDesignerTab).tableName === tableName
+              : !(t as TableDesignerTab).tableName)
+        )
       }
     }),
     {
@@ -465,19 +541,37 @@ export const useTabStore = create<TabState>()(
         // Only persist pinned tabs
         tabs: state.tabs
           .filter((t) => t.isPinned)
-          .map(
-            (t): PersistedTab => ({
+          .map((t): PersistedTab => {
+            const base: PersistedTab = {
               id: t.id,
               type: t.type,
               title: t.title,
               isPinned: t.isPinned,
               connectionId: t.connectionId,
-              order: t.order,
-              query: t.type !== 'erd' ? t.query : undefined,
+              order: t.order
+            }
+
+            if (t.type === 'erd') {
+              return base
+            }
+
+            if (t.type === 'table-designer') {
+              return {
+                ...base,
+                schemaName: t.schemaName,
+                tableName: t.tableName,
+                mode: t.mode
+              }
+            }
+
+            // query or table-preview tabs
+            return {
+              ...base,
+              query: t.query,
               schemaName: t.type === 'table-preview' ? t.schemaName : undefined,
               tableName: t.type === 'table-preview' ? t.tableName : undefined
-            })
-          ),
+            }
+          }),
         activeTabId: state.activeTabId
       }),
       onRehydrateStorage: () => (state) => {
@@ -491,6 +585,19 @@ export const useTabStore = create<TabState>()(
                 type: 'erd' as const,
                 createdAt: Date.now()
               }
+            }
+
+            // Table designer tabs
+            if (t.type === 'table-designer') {
+              const persisted = t as unknown as PersistedTab
+              return {
+                ...t,
+                type: 'table-designer' as const,
+                createdAt: Date.now(),
+                schemaName: persisted.schemaName ?? 'public',
+                tableName: persisted.tableName,
+                mode: persisted.mode ?? 'create'
+              } as TableDesignerTab
             }
 
             const base = {

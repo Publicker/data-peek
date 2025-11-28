@@ -215,3 +215,327 @@ export interface ParameterizedQuery {
   sql: string;
   params: unknown[];
 }
+
+// ============================================
+// DDL Types - Table Designer
+// ============================================
+
+/**
+ * PostgreSQL data types for the type selector dropdown
+ */
+export type PostgresDataType =
+  | 'smallint'
+  | 'integer'
+  | 'bigint'
+  | 'serial'
+  | 'bigserial'
+  | 'numeric'
+  | 'real'
+  | 'double precision'
+  | 'money'
+  | 'char'
+  | 'varchar'
+  | 'text'
+  | 'bytea'
+  | 'timestamp'
+  | 'timestamptz'
+  | 'date'
+  | 'time'
+  | 'timetz'
+  | 'interval'
+  | 'boolean'
+  | 'uuid'
+  | 'json'
+  | 'jsonb'
+  | 'xml'
+  | 'point'
+  | 'line'
+  | 'lseg'
+  | 'box'
+  | 'path'
+  | 'polygon'
+  | 'circle'
+  | 'cidr'
+  | 'inet'
+  | 'macaddr'
+  | 'int4range'
+  | 'int8range'
+  | 'numrange'
+  | 'tsrange'
+  | 'tstzrange'
+  | 'daterange';
+
+/**
+ * Column definition for table designer
+ * Used for both CREATE TABLE and ALTER TABLE operations
+ */
+export interface ColumnDefinition {
+  /** Client-side tracking ID */
+  id: string;
+  /** Column name */
+  name: string;
+  /** Data type (PostgreSQL type or custom type) */
+  dataType: PostgresDataType | string;
+  /** Length for varchar(n), char(n) */
+  length?: number;
+  /** Precision for numeric(p,s) */
+  precision?: number;
+  /** Scale for numeric(p,s) */
+  scale?: number;
+  /** Whether the column allows NULL values */
+  isNullable: boolean;
+  /** Whether this column is part of the primary key */
+  isPrimaryKey: boolean;
+  /** Whether this column has a UNIQUE constraint */
+  isUnique: boolean;
+  /** Default value expression */
+  defaultValue?: string;
+  /** Type of default value */
+  defaultType?: 'value' | 'expression' | 'sequence';
+  /** Sequence name for nextval('sequence') */
+  sequenceName?: string;
+  /** Column-level CHECK constraint expression */
+  checkConstraint?: string;
+  /** Column comment */
+  comment?: string;
+  /** Collation for text types */
+  collation?: string;
+  /** Whether this is an array type (e.g., text[]) */
+  isArray?: boolean;
+}
+
+/**
+ * Constraint types supported by PostgreSQL
+ */
+export type ConstraintType =
+  | 'primary_key'
+  | 'foreign_key'
+  | 'unique'
+  | 'check'
+  | 'exclude';
+
+/**
+ * Foreign key referential actions
+ */
+export type ReferentialAction =
+  | 'NO ACTION'
+  | 'RESTRICT'
+  | 'CASCADE'
+  | 'SET NULL'
+  | 'SET DEFAULT';
+
+/**
+ * Index access methods
+ */
+export type IndexMethod = 'btree' | 'hash' | 'gist' | 'gin' | 'spgist' | 'brin';
+
+/**
+ * Constraint definition for table designer
+ */
+export interface ConstraintDefinition {
+  /** Client-side tracking ID */
+  id: string;
+  /** Constraint name (optional, auto-generated if not provided) */
+  name?: string;
+  /** Type of constraint */
+  type: ConstraintType;
+  /** Columns involved in the constraint */
+  columns: string[];
+  // Foreign key specific
+  /** Schema containing the referenced table */
+  referencedSchema?: string;
+  /** Referenced table name */
+  referencedTable?: string;
+  /** Referenced column names */
+  referencedColumns?: string[];
+  /** ON UPDATE action */
+  onUpdate?: ReferentialAction;
+  /** ON DELETE action */
+  onDelete?: ReferentialAction;
+  // Check constraint specific
+  /** CHECK constraint expression */
+  checkExpression?: string;
+  // Exclude constraint specific
+  /** Exclude constraint elements */
+  excludeElements?: Array<{ column: string; operator: string }>;
+  /** Index method for exclude constraint */
+  excludeUsing?: IndexMethod;
+}
+
+/**
+ * Index column specification
+ */
+export interface IndexColumn {
+  /** Column name or expression */
+  name: string;
+  /** Sort order */
+  order?: 'ASC' | 'DESC';
+  /** NULLS position */
+  nullsPosition?: 'FIRST' | 'LAST';
+}
+
+/**
+ * Index definition for table designer
+ */
+export interface IndexDefinition {
+  /** Client-side tracking ID */
+  id: string;
+  /** Index name (optional, auto-generated if not provided) */
+  name?: string;
+  /** Columns or expressions in the index */
+  columns: IndexColumn[];
+  /** Whether this is a unique index */
+  isUnique: boolean;
+  /** Index access method */
+  method?: IndexMethod;
+  /** Partial index WHERE clause */
+  where?: string;
+  /** INCLUDE columns (covering index) */
+  include?: string[];
+  /** Whether to create index concurrently */
+  concurrent?: boolean;
+}
+
+/**
+ * Table partitioning strategy
+ */
+export type PartitionType = 'RANGE' | 'LIST' | 'HASH';
+
+/**
+ * Partition definition for partitioned tables
+ */
+export interface PartitionDefinition {
+  /** Partitioning strategy */
+  type: PartitionType;
+  /** Partition key columns */
+  columns: string[];
+}
+
+/**
+ * Full table definition for CREATE TABLE
+ */
+export interface TableDefinition {
+  /** Schema name */
+  schema: string;
+  /** Table name */
+  name: string;
+  /** Column definitions */
+  columns: ColumnDefinition[];
+  /** Table-level constraints */
+  constraints: ConstraintDefinition[];
+  /** Index definitions */
+  indexes: IndexDefinition[];
+  /** Partition configuration */
+  partition?: PartitionDefinition;
+  /** Parent tables for inheritance */
+  inherits?: string[];
+  /** Tablespace name */
+  tablespace?: string;
+  /** Table comment */
+  comment?: string;
+  /** Whether to include OIDs (deprecated in PG 12+) */
+  withOids?: boolean;
+  /** Whether this is an unlogged table */
+  unlogged?: boolean;
+}
+
+// ============================================
+// ALTER TABLE Operation Types
+// ============================================
+
+/**
+ * Column-level ALTER TABLE operations
+ */
+export type AlterColumnOperation =
+  | { type: 'add'; column: ColumnDefinition }
+  | { type: 'drop'; columnName: string; cascade?: boolean }
+  | { type: 'rename'; oldName: string; newName: string }
+  | { type: 'set_type'; columnName: string; newType: string; using?: string }
+  | { type: 'set_nullable'; columnName: string; nullable: boolean }
+  | { type: 'set_default'; columnName: string; defaultValue: string | null }
+  | { type: 'set_comment'; columnName: string; comment: string | null };
+
+/**
+ * Constraint-level ALTER TABLE operations
+ */
+export type AlterConstraintOperation =
+  | { type: 'add_constraint'; constraint: ConstraintDefinition }
+  | { type: 'drop_constraint'; name: string; cascade?: boolean }
+  | { type: 'rename_constraint'; oldName: string; newName: string };
+
+/**
+ * Index ALTER operations
+ */
+export type AlterIndexOperation =
+  | { type: 'create_index'; index: IndexDefinition }
+  | { type: 'drop_index'; name: string; cascade?: boolean; concurrent?: boolean }
+  | { type: 'rename_index'; oldName: string; newName: string }
+  | { type: 'reindex'; name: string; concurrent?: boolean };
+
+/**
+ * Batch of ALTER TABLE operations to execute
+ */
+export interface AlterTableBatch {
+  /** Target schema */
+  schema: string;
+  /** Target table */
+  table: string;
+  /** Column operations */
+  columnOperations: AlterColumnOperation[];
+  /** Constraint operations */
+  constraintOperations: AlterConstraintOperation[];
+  /** Index operations */
+  indexOperations: AlterIndexOperation[];
+  /** New table name (for RENAME TO) */
+  renameTable?: string;
+  /** New schema (for SET SCHEMA) */
+  setSchema?: string;
+  /** Table comment (null to remove) */
+  comment?: string | null;
+}
+
+/**
+ * Result of DDL operations
+ */
+export interface DDLResult {
+  /** Whether all operations succeeded */
+  success: boolean;
+  /** SQL statements that were executed */
+  executedSql: string[];
+  /** Errors encountered during execution */
+  errors?: string[];
+}
+
+// ============================================
+// Database Metadata Types
+// ============================================
+
+/**
+ * Sequence information for default value picker
+ */
+export interface SequenceInfo {
+  /** Schema containing the sequence */
+  schema: string;
+  /** Sequence name */
+  name: string;
+  /** Data type of the sequence */
+  dataType: string;
+  /** Start value */
+  startValue: string;
+  /** Increment value */
+  increment: string;
+}
+
+/**
+ * Custom type information (enums, composites, etc.)
+ */
+export interface CustomTypeInfo {
+  /** Schema containing the type */
+  schema: string;
+  /** Type name */
+  name: string;
+  /** Type category */
+  type: 'enum' | 'composite' | 'range' | 'domain';
+  /** Enum values (for enum types) */
+  values?: string[];
+}

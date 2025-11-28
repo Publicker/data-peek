@@ -12,12 +12,21 @@ import {
   XCircle,
   Search,
   X,
-  Network
+  Network,
+  Plus,
+  Pencil,
+  MoreHorizontal
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import {
   SidebarGroup,
@@ -72,6 +81,7 @@ export function SchemaExplorer() {
   const findTablePreviewTab = useTabStore((s) => s.findTablePreviewTab)
   const setActiveTab = useTabStore((s) => s.setActiveTab)
   const createERDTab = useTabStore((s) => s.createERDTab)
+  const createTableDesignerTab = useTabStore((s) => s.createTableDesignerTab)
 
   const [expandedSchemas, setExpandedSchemas] = React.useState<Set<string>>(
     new Set(schemas.map((s) => s.name))
@@ -154,6 +164,16 @@ export function SchemaExplorer() {
     createERDTab(activeConnectionId)
   }
 
+  const handleCreateTable = (schemaName: string = 'public') => {
+    if (!activeConnectionId) return
+    createTableDesignerTab(activeConnectionId, schemaName)
+  }
+
+  const handleEditTable = (schemaName: string, tableName: string) => {
+    if (!activeConnectionId) return
+    createTableDesignerTab(activeConnectionId, schemaName, tableName)
+  }
+
   if (!activeConnectionId) {
     return (
       <SidebarGroup>
@@ -210,6 +230,15 @@ export function SchemaExplorer() {
       <SidebarGroupLabel className="flex items-center justify-between">
         <span>Schema</span>
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-5 p-0 hover:bg-sidebar-accent"
+            onClick={() => handleCreateTable()}
+            title="Create new table"
+          >
+            <Plus className="size-3.5" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -290,7 +319,7 @@ export function SchemaExplorer() {
                             onOpenChange={() => toggleTable(tableKey)}
                           >
                             <SidebarMenuSubItem>
-                              <div className="flex items-center">
+                              <div className="flex items-center group/table">
                                 <CollapsibleTrigger asChild>
                                   <Button variant="ghost" size="icon" className="size-5 p-0 mr-1">
                                     <ChevronRight
@@ -315,6 +344,34 @@ export function SchemaExplorer() {
                                     </Badge>
                                   )}
                                 </SidebarMenuSubButton>
+                                {table.type === 'table' && (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="size-5 p-0 opacity-0 group-hover/table:opacity-100 transition-opacity"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <MoreHorizontal className="size-3.5" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-40">
+                                      <DropdownMenuItem
+                                        onClick={() => handleTableClick(schema.name, table)}
+                                      >
+                                        <Table2 className="size-4 mr-2" />
+                                        View Data
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => handleEditTable(schema.name, table.name)}
+                                      >
+                                        <Pencil className="size-4 mr-2" />
+                                        Edit Table
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                )}
                               </div>
                               <CollapsibleContent>
                                 <div className="ml-6 border-l border-border/50 pl-2 py-1 space-y-0.5">

@@ -11,9 +11,24 @@ import type {
   QueryField,
   ForeignKeyInfo,
   EditBatch,
-  EditResult
+  EditResult,
+  TableDefinition,
+  AlterTableBatch,
+  DDLResult,
+  SequenceInfo,
+  CustomTypeInfo,
+  ColumnDefinition,
+  ConstraintDefinition,
+  IndexDefinition
 } from '@shared/index'
 import { buildQuery, validateOperation, buildPreviewSql } from './sql-builder'
+import {
+  buildCreateTable,
+  buildAlterTable,
+  buildDropTable,
+  buildPreviewDDL,
+  validateTableDefinition
+} from './ddl-builder'
 import { createMenu } from './menu'
 import { setupContextMenu } from './context-menu'
 import { getWindowState, trackWindowState } from './window-state'
@@ -605,6 +620,498 @@ app.whenReady().then(async () => {
       }
     } catch (error: unknown) {
       console.error('[main:db:explain] Error:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      return { success: false, error: errorMessage }
+    }
+  })
+
+  // ============================================
+  // DDL Handlers - Table Designer
+  // ============================================
+
+  // Create a new table
+  ipcMain.handle(
+    'db:create-table',
+    async (
+      _,
+      { config, definition }: { config: ConnectionConfig; definition: TableDefinition }
+    ) => {
+      console.log('[main:db:create-table] Creating table:', definition.schema, definition.name)
+
+      // Validate table definition
+      const validation = validateTableDefinition(definition)
+      if (!validation.valid) {
+        return {
+          success: false,
+          error: validation.errors.join('; ')
+        }
+      }
+
+      const client = new Client(config)
+      const result: DDLResult = {
+        success: true,
+        executedSql: [],
+        errors: []
+      }
+
+      try {
+        await client.connect()
+        await client.query('BEGIN')
+
+        // Build and execute CREATE TABLE statement
+        const { sql } = buildCreateTable(definition, 'postgresql')
+        result.executedSql.push(sql)
+
+        console.log('[main:db:create-table] Executing:', sql)
+
+        // Execute each statement separately (CREATE TABLE, COMMENT, indexes)
+        const statements = sql.split(/;\s*\n\n/).filter((s) => s.trim())
+        for (const stmt of statements) {
+          if (stmt.trim()) {
+            await client.query(stmt.trim().endsWith(';') ? stmt : stmt + ';')
+          }
+        }
+
+        await client.query('COMMIT')
+        await client.end()
+
+        return { success: true, data: result }
+      } catch (error: unknown) {
+        console.error('[main:db:create-table] Error:', error)
+        await client.query('ROLLBACK').catch(() => {})
+        await client.end().catch(() => {})
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        return { success: false, error: errorMessage }
+      }
+    }
+  )
+
+  // Alter an existing table
+  ipcMain.handle(
+    'db:alter-table',
+    async (_, { config, batch }: { config: ConnectionConfig; batch: AlterTableBatch }) => {
+      console.log('[main:db:alter-table] Altering table:', batch.schema, batch.table)
+
+      const client = new Client(config)
+      const result: DDLResult = {
+        success: true,
+        executedSql: [],
+        errors: []
+      }
+
+      try {
+        await client.connect()
+        await client.query('BEGIN')
+
+        // Build and execute ALTER TABLE statements
+        const queries = buildAlterTable(batch, 'postgresql')
+
+        for (const query of queries) {
+          result.executedSql.push(query.sql)
+          console.log('[main:db:alter-table] Executing:', query.sql)
+
+          try {
+            await client.query(query.sql)
+          } catch (opError: unknown) {
+            const errorMessage = opError instanceof Error ? opError.message : String(opError)
+            result.errors!.push(errorMessage)
+          }
+        }
+
+        if (result.errors && result.errors.length > 0) {
+          await client.query('ROLLBACK')
+          result.success = false
+        } else {
+          await client.query('COMMIT')
+        }
+
+        await client.end()
+        return { success: true, data: result }
+      } catch (error: unknown) {
+        console.error('[main:db:alter-table] Error:', error)
+        await client.query('ROLLBACK').catch(() => {})
+        await client.end().catch(() => {})
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        return { success: false, error: errorMessage }
+      }
+    }
+  )
+
+  // Drop a table
+  ipcMain.handle(
+    'db:drop-table',
+    async (
+      _,
+      {
+        config,
+        schema,
+        table,
+        cascade
+      }: { config: ConnectionConfig; schema: string; table: string; cascade?: boolean }
+    ) => {
+      console.log('[main:db:drop-table] Dropping table:', schema, table)
+
+      const client = new Client(config)
+
+      try {
+        await client.connect()
+
+        const { sql } = buildDropTable(schema, table, cascade, 'postgresql')
+        console.log('[main:db:drop-table] Executing:', sql)
+
+        await client.query(sql)
+        await client.end()
+
+        return {
+          success: true,
+          data: { success: true, executedSql: [sql] }
+        }
+      } catch (error: unknown) {
+        console.error('[main:db:drop-table] Error:', error)
+        await client.end().catch(() => {})
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        return { success: false, error: errorMessage }
+      }
+    }
+  )
+
+  // Get table definition (reverse engineer from database)
+  ipcMain.handle(
+    'db:get-table-ddl',
+    async (
+      _,
+      { config, schema, table }: { config: ConnectionConfig; schema: string; table: string }
+    ) => {
+      console.log('[main:db:get-table-ddl] Getting DDL for:', schema, table)
+
+      const client = new Client(config)
+
+      try {
+        await client.connect()
+
+        // Query columns with full metadata
+        const columnsResult = await client.query(
+          `
+          SELECT
+            c.column_name,
+            c.data_type,
+            c.udt_name,
+            c.is_nullable,
+            c.column_default,
+            c.ordinal_position,
+            c.character_maximum_length,
+            c.numeric_precision,
+            c.numeric_scale,
+            c.collation_name,
+            CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END as is_primary_key,
+            col_description(
+              (quote_ident($1) || '.' || quote_ident($2))::regclass,
+              c.ordinal_position
+            ) as column_comment
+          FROM information_schema.columns c
+          LEFT JOIN (
+            SELECT kcu.column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name
+              AND tc.table_schema = kcu.table_schema
+            WHERE tc.constraint_type = 'PRIMARY KEY'
+              AND tc.table_schema = $1
+              AND tc.table_name = $2
+          ) pk ON c.column_name = pk.column_name
+          WHERE c.table_schema = $1 AND c.table_name = $2
+          ORDER BY c.ordinal_position
+        `,
+          [schema, table]
+        )
+
+        // Query constraints
+        const constraintsResult = await client.query(
+          `
+          SELECT
+            tc.constraint_name,
+            tc.constraint_type,
+            kcu.column_name,
+            ccu.table_schema AS ref_schema,
+            ccu.table_name AS ref_table,
+            ccu.column_name AS ref_column,
+            rc.update_rule,
+            rc.delete_rule,
+            cc.check_clause
+          FROM information_schema.table_constraints tc
+          LEFT JOIN information_schema.key_column_usage kcu
+            ON tc.constraint_name = kcu.constraint_name
+            AND tc.table_schema = kcu.table_schema
+          LEFT JOIN information_schema.constraint_column_usage ccu
+            ON tc.constraint_name = ccu.constraint_name
+            AND tc.constraint_type = 'FOREIGN KEY'
+          LEFT JOIN information_schema.referential_constraints rc
+            ON tc.constraint_name = rc.constraint_name
+          LEFT JOIN information_schema.check_constraints cc
+            ON tc.constraint_name = cc.constraint_name
+          WHERE tc.table_schema = $1 AND tc.table_name = $2
+          ORDER BY tc.constraint_name, kcu.ordinal_position
+        `,
+          [schema, table]
+        )
+
+        // Query indexes
+        const indexesResult = await client.query(
+          `
+          SELECT
+            i.relname as index_name,
+            ix.indisunique as is_unique,
+            am.amname as index_method,
+            array_agg(a.attname ORDER BY array_position(ix.indkey, a.attnum)) as columns,
+            pg_get_expr(ix.indpred, ix.indrelid) as where_clause
+          FROM pg_index ix
+          JOIN pg_class i ON i.oid = ix.indexrelid
+          JOIN pg_class t ON t.oid = ix.indrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          JOIN pg_am am ON am.oid = i.relam
+          LEFT JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+          WHERE n.nspname = $1 AND t.relname = $2
+            AND NOT ix.indisprimary  -- Exclude primary key index
+          GROUP BY i.relname, ix.indisunique, am.amname, ix.indpred, ix.indrelid
+        `,
+          [schema, table]
+        )
+
+        // Query table comment
+        const tableCommentResult = await client.query(
+          `
+          SELECT obj_description(
+            (quote_ident($1) || '.' || quote_ident($2))::regclass
+          ) as comment
+        `,
+          [schema, table]
+        )
+
+        await client.end()
+
+        // Build TableDefinition
+        const columns: ColumnDefinition[] = columnsResult.rows.map((row, idx) => ({
+          id: `col-${idx}`,
+          name: row.column_name,
+          dataType: row.udt_name,
+          length: row.character_maximum_length || undefined,
+          precision: row.numeric_precision || undefined,
+          scale: row.numeric_scale || undefined,
+          isNullable: row.is_nullable === 'YES',
+          isPrimaryKey: row.is_primary_key,
+          isUnique: false, // Will be set from constraints
+          defaultValue: row.column_default || undefined,
+          comment: row.column_comment || undefined,
+          collation: row.collation_name || undefined
+        }))
+
+        // Build constraints from query results
+        const constraintMap = new Map<
+          string,
+          { type: string; columns: string[]; refSchema?: string; refTable?: string; refColumns?: string[]; onUpdate?: string; onDelete?: string; checkExpression?: string }
+        >()
+
+        for (const row of constraintsResult.rows) {
+          const key = row.constraint_name
+          if (!constraintMap.has(key)) {
+            constraintMap.set(key, {
+              type: row.constraint_type,
+              columns: [],
+              refSchema: row.ref_schema,
+              refTable: row.ref_table,
+              refColumns: [],
+              onUpdate: row.update_rule,
+              onDelete: row.delete_rule,
+              checkExpression: row.check_clause
+            })
+          }
+          const constraint = constraintMap.get(key)!
+          if (row.column_name && !constraint.columns.includes(row.column_name)) {
+            constraint.columns.push(row.column_name)
+          }
+          if (row.ref_column && !constraint.refColumns!.includes(row.ref_column)) {
+            constraint.refColumns!.push(row.ref_column)
+          }
+        }
+
+        const constraints: ConstraintDefinition[] = []
+        let constraintIdx = 0
+        for (const [name, data] of constraintMap) {
+          // Skip primary key (handled at column level)
+          if (data.type === 'PRIMARY KEY') continue
+
+          const constraintDef: ConstraintDefinition = {
+            id: `constraint-${constraintIdx++}`,
+            name,
+            type:
+              data.type === 'FOREIGN KEY'
+                ? 'foreign_key'
+                : data.type === 'UNIQUE'
+                  ? 'unique'
+                  : data.type === 'CHECK'
+                    ? 'check'
+                    : 'unique',
+            columns: data.columns
+          }
+
+          if (data.type === 'FOREIGN KEY') {
+            constraintDef.referencedSchema = data.refSchema
+            constraintDef.referencedTable = data.refTable
+            constraintDef.referencedColumns = data.refColumns
+            constraintDef.onUpdate = data.onUpdate as ConstraintDefinition['onUpdate']
+            constraintDef.onDelete = data.onDelete as ConstraintDefinition['onDelete']
+          }
+
+          if (data.type === 'CHECK') {
+            constraintDef.checkExpression = data.checkExpression
+          }
+
+          // Mark columns as unique for UNIQUE constraints
+          if (data.type === 'UNIQUE' && data.columns.length === 1) {
+            const col = columns.find((c) => c.name === data.columns[0])
+            if (col) col.isUnique = true
+          }
+
+          constraints.push(constraintDef)
+        }
+
+        // Build indexes
+        const indexes: IndexDefinition[] = indexesResult.rows.map((row, idx) => ({
+          id: `index-${idx}`,
+          name: row.index_name,
+          columns: (row.columns as string[]).map((c) => ({ name: c })),
+          isUnique: row.is_unique,
+          method: row.index_method as IndexDefinition['method'],
+          where: row.where_clause || undefined
+        }))
+
+        const definition: TableDefinition = {
+          schema,
+          name: table,
+          columns,
+          constraints,
+          indexes,
+          comment: tableCommentResult.rows[0]?.comment || undefined
+        }
+
+        return { success: true, data: definition }
+      } catch (error: unknown) {
+        console.error('[main:db:get-table-ddl] Error:', error)
+        await client.end().catch(() => {})
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        return { success: false, error: errorMessage }
+      }
+    }
+  )
+
+  // Get available sequences
+  ipcMain.handle('db:get-sequences', async (_, config: ConnectionConfig) => {
+    console.log('[main:db:get-sequences] Fetching sequences')
+
+    const client = new Client(config)
+
+    try {
+      await client.connect()
+
+      const result = await client.query(`
+        SELECT
+          schemaname as schema,
+          sequencename as name,
+          data_type,
+          start_value::text,
+          increment_by::text as increment
+        FROM pg_sequences
+        WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+        ORDER BY schemaname, sequencename
+      `)
+
+      await client.end()
+
+      const sequences: SequenceInfo[] = result.rows.map((row) => ({
+        schema: row.schema,
+        name: row.name,
+        dataType: row.data_type,
+        startValue: row.start_value,
+        increment: row.increment
+      }))
+
+      return { success: true, data: sequences }
+    } catch (error: unknown) {
+      console.error('[main:db:get-sequences] Error:', error)
+      await client.end().catch(() => {})
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      return { success: false, error: errorMessage }
+    }
+  })
+
+  // Get custom types (enums, composites, etc.)
+  ipcMain.handle('db:get-types', async (_, config: ConnectionConfig) => {
+    console.log('[main:db:get-types] Fetching custom types')
+
+    const client = new Client(config)
+
+    try {
+      await client.connect()
+
+      // Get enum types with their values
+      const enumsResult = await client.query(`
+        SELECT
+          n.nspname as schema,
+          t.typname as name,
+          'enum' as type_category,
+          array_agg(e.enumlabel ORDER BY e.enumsortorder) as values
+        FROM pg_type t
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+        JOIN pg_enum e ON e.enumtypid = t.oid
+        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+        GROUP BY n.nspname, t.typname
+        ORDER BY n.nspname, t.typname
+      `)
+
+      // Get domain types
+      const domainsResult = await client.query(`
+        SELECT
+          n.nspname as schema,
+          t.typname as name,
+          'domain' as type_category
+        FROM pg_type t
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE t.typtype = 'd'
+          AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+        ORDER BY n.nspname, t.typname
+      `)
+
+      await client.end()
+
+      const types: CustomTypeInfo[] = [
+        ...enumsResult.rows.map((row) => ({
+          schema: row.schema,
+          name: row.name,
+          type: 'enum' as const,
+          values: row.values
+        })),
+        ...domainsResult.rows.map((row) => ({
+          schema: row.schema,
+          name: row.name,
+          type: 'domain' as const
+        }))
+      ]
+
+      return { success: true, data: types }
+    } catch (error: unknown) {
+      console.error('[main:db:get-types] Error:', error)
+      await client.end().catch(() => {})
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      return { success: false, error: errorMessage }
+    }
+  })
+
+  // Preview DDL without executing
+  ipcMain.handle('db:preview-ddl', (_, { definition }: { definition: TableDefinition }) => {
+    try {
+      const sql = buildPreviewDDL(definition, 'postgresql')
+      return { success: true, data: sql }
+    } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       return { success: false, error: errorMessage }
     }
