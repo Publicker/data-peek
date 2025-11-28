@@ -1,6 +1,5 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
-import type { Connection } from './connection-store'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import type { QueryResult } from './query-store'
 
 // Tab type discriminator
@@ -70,11 +69,7 @@ interface TabState {
 
   // Actions
   createQueryTab: (connectionId: string | null, initialQuery?: string) => string
-  createTablePreviewTab: (
-    connectionId: string,
-    schemaName: string,
-    tableName: string
-  ) => string
+  createTablePreviewTab: (connectionId: string, schemaName: string, tableName: string) => string
   createForeignKeyTab: (
     connectionId: string,
     schema: string,
@@ -90,11 +85,7 @@ interface TabState {
 
   setActiveTab: (tabId: string) => void
   updateTabQuery: (tabId: string, query: string) => void
-  updateTabResult: (
-    tabId: string,
-    result: QueryResult | null,
-    error: string | null
-  ) => void
+  updateTabResult: (tabId: string, result: QueryResult | null, error: string | null) => void
   updateTabExecuting: (tabId: string, isExecuting: boolean) => void
   markTabSaved: (tabId: string) => void
 
@@ -120,7 +111,11 @@ interface TabState {
   isTabDirty: (tabId: string) => boolean
   getTabPaginatedRows: (tabId: string) => Record<string, unknown>[]
   getTabTotalPages: (tabId: string) => number
-  findTablePreviewTab: (connectionId: string, schemaName: string, tableName: string) => Tab | undefined
+  findTablePreviewTab: (
+    connectionId: string,
+    schemaName: string,
+    tableName: string
+  ) => Tab | undefined
   findERDTab: (connectionId: string) => Tab | undefined
 }
 
@@ -316,9 +311,7 @@ export const useTabStore = create<TabState>()(
           const tabIndex = state.tabs.findIndex((t) => t.id === tabId)
           if (tabIndex === -1) return state
 
-          const keptTabs = state.tabs.filter(
-            (t, i) => i <= tabIndex || t.isPinned
-          )
+          const keptTabs = state.tabs.filter((t, i) => i <= tabIndex || t.isPinned)
           return {
             tabs: keptTabs,
             activeTabId: state.activeTabId
@@ -332,27 +325,21 @@ export const useTabStore = create<TabState>()(
 
       updateTabQuery: (tabId, query) => {
         set((state) => ({
-          tabs: state.tabs.map((t) =>
-            t.id === tabId ? { ...t, query } : t
-          )
+          tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, query } : t))
         }))
       },
 
       updateTabResult: (tabId, result, error) => {
         set((state) => ({
           tabs: state.tabs.map((t) =>
-            t.id === tabId
-              ? { ...t, result, error, currentPage: 1 }
-              : t
+            t.id === tabId ? { ...t, result, error, currentPage: 1 } : t
           )
         }))
       },
 
       updateTabExecuting: (tabId, isExecuting) => {
         set((state) => ({
-          tabs: state.tabs.map((t) =>
-            t.id === tabId ? { ...t, isExecuting } : t
-          )
+          tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, isExecuting } : t))
         }))
       },
 
@@ -366,9 +353,7 @@ export const useTabStore = create<TabState>()(
 
       setTabPage: (tabId, page) => {
         set((state) => ({
-          tabs: state.tabs.map((t) =>
-            t.id === tabId ? { ...t, currentPage: page } : t
-          )
+          tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, currentPage: page } : t))
         }))
       },
 
@@ -382,9 +367,7 @@ export const useTabStore = create<TabState>()(
 
       pinTab: (tabId) => {
         set((state) => {
-          const updatedTabs = state.tabs.map((t) =>
-            t.id === tabId ? { ...t, isPinned: true } : t
-          )
+          const updatedTabs = state.tabs.map((t) => (t.id === tabId ? { ...t, isPinned: true } : t))
           // Sort: pinned tabs first, then by order
           return {
             tabs: updatedTabs.sort((a, b) => {
@@ -398,9 +381,7 @@ export const useTabStore = create<TabState>()(
 
       unpinTab: (tabId) => {
         set((state) => ({
-          tabs: state.tabs.map((t) =>
-            t.id === tabId ? { ...t, isPinned: false } : t
-          )
+          tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, isPinned: false } : t))
         }))
       },
 
@@ -419,9 +400,7 @@ export const useTabStore = create<TabState>()(
 
       renameTab: (tabId, title) => {
         set((state) => ({
-          tabs: state.tabs.map((t) =>
-            t.id === tabId ? { ...t, title } : t
-          )
+          tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, title } : t))
         }))
       },
 
@@ -476,9 +455,7 @@ export const useTabStore = create<TabState>()(
       },
 
       findERDTab: (connectionId) => {
-        return get().tabs.find(
-          (t) => t.type === 'erd' && t.connectionId === connectionId
-        )
+        return get().tabs.find((t) => t.type === 'erd' && t.connectionId === connectionId)
       }
     }),
     {
@@ -503,7 +480,7 @@ export const useTabStore = create<TabState>()(
           ),
         activeTabId: state.activeTabId
       }),
-      onRehydrate: () => (state) => {
+      onRehydrateStorage: () => (state) => {
         // Restore pinned tabs with full state on app load
         if (state) {
           state.tabs = state.tabs.map((t) => {

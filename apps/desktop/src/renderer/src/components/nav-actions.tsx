@@ -6,7 +6,6 @@ import {
   Wand2,
   Copy,
   Trash2,
-  Download,
   FileJson,
   FileSpreadsheet,
   MoreHorizontal,
@@ -16,11 +15,7 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger
-} from '@/components/ui/popover'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Sidebar,
   SidebarContent,
@@ -30,11 +25,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem
 } from '@/components/ui/sidebar'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger
-} from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useQueryStore, useConnectionStore } from '@/stores'
 import { formatSQL } from '@/lib/sql-formatter'
 
@@ -54,17 +45,20 @@ export function NavActions() {
     setIsExecuting(true)
     const startTime = Date.now()
 
-    setTimeout(() => {
-      const durationMs = Date.now() - startTime + Math.random() * 50
-      addToHistory({
-        query: currentQuery,
-        durationMs: Math.round(durationMs),
-        rowCount: result?.rowCount ?? 0,
-        status: 'success',
-        connectionId: activeConnection.id
-      })
-      setIsExecuting(false)
-    }, 300 + Math.random() * 200)
+    setTimeout(
+      () => {
+        const durationMs = Date.now() - startTime + Math.random() * 50
+        addToHistory({
+          query: currentQuery,
+          durationMs: Math.round(durationMs),
+          rowCount: result?.rowCount ?? 0,
+          status: 'success',
+          connectionId: activeConnection.id
+        })
+        setIsExecuting(false)
+      },
+      300 + Math.random() * 200
+    )
   }
 
   const handleFormatQuery = () => {
@@ -178,18 +172,11 @@ export function NavActions() {
       {/* More Actions Popover */}
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="data-[state=open]:bg-accent h-7 w-7"
-          >
+          <Button variant="ghost" size="icon" className="data-[state=open]:bg-accent h-7 w-7">
             <MoreHorizontal className="size-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent
-          className="w-52 overflow-hidden rounded-lg p-0"
-          align="end"
-        >
+        <PopoverContent className="w-52 overflow-hidden rounded-lg p-0" align="end">
           <Sidebar collapsible="none" className="bg-transparent">
             <SidebarContent>
               {/* Query Actions */}
