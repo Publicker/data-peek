@@ -15,7 +15,7 @@ import {
   Handle
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Key, Columns3 } from 'lucide-react'
+import { Key, Columns3, GitBranch } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { SchemaInfo, ColumnInfo } from '@shared/index'
 
@@ -23,24 +23,96 @@ interface TableNodeData extends Record<string, unknown> {
   label: string
   schemaName: string
   columns: ColumnInfo[]
+  isHub: boolean
+  clusterColor: string
+  relationshipCount: number
 }
 
-// Custom Table Node Component
+interface ClusterNodeData extends Record<string, unknown> {
+  label: string
+  tableCount: number
+  color: string
+}
+
+// Cluster background node
+function ClusterNode({ data }: { data: ClusterNodeData }) {
+  return (
+    <div
+      className="rounded-2xl border-2 border-dashed transition-all"
+      style={{
+        backgroundColor: `${data.color}08`,
+        borderColor: `${data.color}30`,
+        width: '100%',
+        height: '100%'
+      }}
+    >
+      <div
+        className="absolute -top-3 left-4 px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide uppercase"
+        style={{
+          backgroundColor: `${data.color}20`,
+          color: data.color
+        }}
+      >
+        {data.label} · {data.tableCount} tables
+      </div>
+    </div>
+  )
+}
+
+// Custom Table Node Component with enhanced styling
 function TableNode({ data }: { data: TableNodeData }) {
   return (
-    <div className="bg-card border border-border rounded-lg shadow-md min-w-[200px] overflow-hidden">
+    <div
+      className={cn(
+        'bg-card border rounded-lg shadow-lg min-w-[220px] overflow-hidden transition-all',
+        data.isHub ? 'border-2 shadow-xl' : 'border'
+      )}
+      style={{
+        borderColor: data.isHub ? data.clusterColor : 'var(--border)'
+      }}
+    >
       {/* Table Header */}
-      <div className="bg-primary/10 px-3 py-2 border-b border-border">
-        <div className="font-semibold text-sm text-foreground">{data.label}</div>
-        <div className="text-[10px] text-muted-foreground">{data.schemaName}</div>
+      <div
+        className="px-3 py-2.5 border-b"
+        style={{
+          background: data.isHub
+            ? `linear-gradient(135deg, ${data.clusterColor}15, ${data.clusterColor}08)`
+            : 'var(--muted)',
+          borderColor: data.isHub ? `${data.clusterColor}30` : 'var(--border)'
+        }}
+      >
+        <div className="flex items-center gap-2">
+          {data.isHub && (
+            <GitBranch className="size-3.5" style={{ color: data.clusterColor }} />
+          )}
+          <div className="flex-1">
+            <div
+              className={cn('font-semibold text-sm', data.isHub && 'font-bold')}
+              style={{ color: data.isHub ? data.clusterColor : 'var(--foreground)' }}
+            >
+              {data.label}
+            </div>
+            <div className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+              <span>{data.schemaName}</span>
+              {data.relationshipCount > 0 && (
+                <>
+                  <span className="opacity-40">·</span>
+                  <span style={{ color: `${data.clusterColor}90` }}>
+                    {data.relationshipCount} relation{data.relationshipCount !== 1 ? 's' : ''}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Columns */}
-      <div className="py-1">
+      <div className="py-1 max-h-[300px] overflow-y-auto">
         {data.columns.map((column) => (
           <div
             key={column.name}
-            className="relative flex items-center gap-2 px-3 py-1 text-xs hover:bg-muted/50"
+            className="relative flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
           >
             {/* Source handle for FK columns */}
             {column.foreignKey && (
@@ -48,7 +120,8 @@ function TableNode({ data }: { data: TableNodeData }) {
                 type="source"
                 position={Position.Right}
                 id={`${column.name}-source`}
-                className="!bg-blue-500 !w-2 !h-2"
+                className="!w-2.5 !h-2.5 !border-2 !border-background"
+                style={{ backgroundColor: data.clusterColor }}
               />
             )}
 
@@ -58,26 +131,28 @@ function TableNode({ data }: { data: TableNodeData }) {
                 type="target"
                 position={Position.Left}
                 id={`${column.name}-target`}
-                className="!bg-yellow-500 !w-2 !h-2"
+                className="!bg-amber-500 !w-2.5 !h-2.5 !border-2 !border-background"
               />
             )}
 
             {column.isPrimaryKey ? (
-              <Key className="size-3 text-yellow-500 shrink-0" />
+              <Key className="size-3.5 text-amber-500 shrink-0" />
             ) : column.foreignKey ? (
-              <Key className="size-3 text-blue-500 shrink-0" />
+              <Key className="size-3.5 shrink-0" style={{ color: data.clusterColor }} />
             ) : (
-              <Columns3 className="size-3 text-muted-foreground shrink-0" />
+              <Columns3 className="size-3.5 text-muted-foreground/60 shrink-0" />
             )}
 
             <span className={cn('flex-1 truncate', column.isPrimaryKey && 'font-medium')}>
               {column.name}
             </span>
 
-            <span className="text-[10px] text-muted-foreground font-mono">{column.dataType}</span>
+            <span className="text-[10px] text-muted-foreground/70 font-mono">
+              {column.dataType}
+            </span>
 
             {!column.isNullable && !column.isPrimaryKey && (
-              <span className="text-red-400 text-[10px]">*</span>
+              <span className="text-red-400/80 text-[10px] font-bold">*</span>
             )}
           </div>
         ))}
@@ -87,65 +162,333 @@ function TableNode({ data }: { data: TableNodeData }) {
 }
 
 const nodeTypes = {
-  tableNode: TableNode
+  tableNode: TableNode,
+  clusterNode: ClusterNode
 }
 
 interface ERDVisualizationProps {
   schemas: SchemaInfo[]
 }
 
+// Cluster color palette - distinctive, accessible colors
+const CLUSTER_COLORS = [
+  '#6366f1', // Indigo
+  '#10b981', // Emerald
+  '#f59e0b', // Amber
+  '#ec4899', // Pink
+  '#8b5cf6', // Violet
+  '#06b6d4', // Cyan
+  '#f97316', // Orange
+  '#14b8a6', // Teal
+  '#a855f7', // Purple
+  '#84cc16' // Lime
+]
+
+// Graph utilities for relationship-based layout
+interface TableGraph {
+  nodes: Set<string>
+  edges: Map<string, Set<string>>
+  edgeCounts: Map<string, number>
+}
+
+function buildRelationshipGraph(schemas: SchemaInfo[]): TableGraph {
+  const nodes = new Set<string>()
+  const edges = new Map<string, Set<string>>()
+  const edgeCounts = new Map<string, number>()
+
+  // Add all tables as nodes
+  schemas.forEach((schema) => {
+    schema.tables.forEach((table) => {
+      const tableKey = `${schema.name}.${table.name}`
+      nodes.add(tableKey)
+      edges.set(tableKey, new Set())
+      edgeCounts.set(tableKey, 0)
+    })
+  })
+
+  // Add edges for foreign key relationships (bidirectional for clustering)
+  schemas.forEach((schema) => {
+    schema.tables.forEach((table) => {
+      const sourceKey = `${schema.name}.${table.name}`
+      table.columns.forEach((column) => {
+        if (column.foreignKey) {
+          const targetKey = `${column.foreignKey.referencedSchema}.${column.foreignKey.referencedTable}`
+          if (nodes.has(targetKey)) {
+            edges.get(sourceKey)?.add(targetKey)
+            edges.get(targetKey)?.add(sourceKey)
+            edgeCounts.set(sourceKey, (edgeCounts.get(sourceKey) || 0) + 1)
+            edgeCounts.set(targetKey, (edgeCounts.get(targetKey) || 0) + 1)
+          }
+        }
+      })
+    })
+  })
+
+  return { nodes, edges, edgeCounts }
+}
+
+function findConnectedComponents(graph: TableGraph): string[][] {
+  const visited = new Set<string>()
+  const components: string[][] = []
+
+  function dfs(node: string, component: string[]) {
+    if (visited.has(node)) return
+    visited.add(node)
+    component.push(node)
+    graph.edges.get(node)?.forEach((neighbor) => {
+      dfs(neighbor, component)
+    })
+  }
+
+  graph.nodes.forEach((node) => {
+    if (!visited.has(node)) {
+      const component: string[] = []
+      dfs(node, component)
+      components.push(component)
+    }
+  })
+
+  // Sort components by size (largest first), then by edge count
+  return components.sort((a, b) => {
+    const aEdges = a.reduce((sum, n) => sum + (graph.edgeCounts.get(n) || 0), 0)
+    const bEdges = b.reduce((sum, n) => sum + (graph.edgeCounts.get(n) || 0), 0)
+    if (a.length !== b.length) return b.length - a.length
+    return bEdges - aEdges
+  })
+}
+
+function findHubTable(component: string[], edgeCounts: Map<string, number>): string {
+  // Hub is the table with most relationships
+  return component.reduce((hub, table) => {
+    const hubCount = edgeCounts.get(hub) || 0
+    const tableCount = edgeCounts.get(table) || 0
+    return tableCount > hubCount ? table : hub
+  }, component[0])
+}
+
+interface ClusterLayout {
+  tables: Map<string, { x: number; y: number }>
+  bounds: { x: number; y: number; width: number; height: number }
+  hub: string
+}
+
+function layoutCluster(
+  component: string[],
+  graph: TableGraph,
+  tableHeights: Map<string, number>
+): ClusterLayout {
+  const positions = new Map<string, { x: number; y: number }>()
+  const hub = findHubTable(component, graph.edgeCounts)
+
+  if (component.length === 1) {
+    // Single table cluster
+    positions.set(component[0], { x: 0, y: 0 })
+    const height = tableHeights.get(component[0]) || 200
+    return {
+      tables: positions,
+      bounds: { x: 0, y: 0, width: 280, height: height + 40 },
+      hub
+    }
+  }
+
+  // Radial layout with hub at center
+  const TABLE_WIDTH = 260
+  const RADIAL_SPACING = 320
+  const VERTICAL_SPACING = 80
+
+  // Place hub at center
+  positions.set(hub, { x: 0, y: 0 })
+
+  // Get directly connected tables first
+  const directlyConnected = Array.from(graph.edges.get(hub) || []).filter((t) =>
+    component.includes(t)
+  )
+  const otherTables = component.filter((t) => t !== hub && !directlyConnected.includes(t))
+
+  // Layout directly connected tables in a radial pattern around hub
+  if (directlyConnected.length <= 4) {
+    // Cardinal positions for up to 4 tables
+    const cardinalPositions = [
+      { x: 0, y: -RADIAL_SPACING }, // Top
+      { x: RADIAL_SPACING, y: 0 }, // Right
+      { x: 0, y: RADIAL_SPACING }, // Bottom
+      { x: -RADIAL_SPACING, y: 0 } // Left
+    ]
+    directlyConnected.forEach((table, i) => {
+      positions.set(table, cardinalPositions[i])
+    })
+  } else {
+    // Circular layout for more tables
+    const angleStep = (2 * Math.PI) / directlyConnected.length
+    directlyConnected.forEach((table, i) => {
+      const angle = i * angleStep - Math.PI / 2 // Start from top
+      positions.set(table, {
+        x: Math.cos(angle) * RADIAL_SPACING,
+        y: Math.sin(angle) * RADIAL_SPACING
+      })
+    })
+  }
+
+  // Place remaining tables in outer ring
+  if (otherTables.length > 0) {
+    const outerRadius = RADIAL_SPACING * 1.8
+    const angleStep = (2 * Math.PI) / otherTables.length
+    otherTables.forEach((table, i) => {
+      const angle = i * angleStep + (Math.PI / otherTables.length) // Offset to avoid overlap
+      positions.set(table, {
+        x: Math.cos(angle) * outerRadius,
+        y: Math.sin(angle) * outerRadius
+      })
+    })
+  }
+
+  // Calculate bounds
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity
+  positions.forEach((pos, table) => {
+    const height = tableHeights.get(table) || 200
+    minX = Math.min(minX, pos.x)
+    maxX = Math.max(maxX, pos.x + TABLE_WIDTH)
+    minY = Math.min(minY, pos.y)
+    maxY = Math.max(maxY, pos.y + height)
+  })
+
+  const padding = 60
+  return {
+    tables: positions,
+    bounds: {
+      x: minX - padding,
+      y: minY - padding,
+      width: maxX - minX + TABLE_WIDTH + padding * 2,
+      height: maxY - minY + padding * 2 + VERTICAL_SPACING
+    },
+    hub
+  }
+}
+
 export function ERDVisualization({ schemas }: ERDVisualizationProps) {
-  // Generate nodes and edges from schema data
   const { initialNodes, initialEdges } = useMemo(() => {
-    const nodes: Node<TableNodeData>[] = []
+    const nodes: Node<TableNodeData | ClusterNodeData>[] = []
     const edges: Edge[] = []
-    const tablePositions = new Map<string, { x: number; y: number }>()
 
-    // Layout calculation
-    const COLUMN_GAP = 350
-    const ROW_GAP = 50
-    const TABLE_HEIGHT_PER_COLUMN = 24
-    const TABLE_HEADER_HEIGHT = 60
+    // Build relationship graph
+    const graph = buildRelationshipGraph(schemas)
 
-    let currentX = 0
-    let currentY = 0
-    let maxHeightInRow = 0
-    let tablesInRow = 0
-    const MAX_TABLES_PER_ROW = 4
+    // Calculate table heights
+    const tableHeights = new Map<string, number>()
+    const tableDataMap = new Map<
+      string,
+      { schemaName: string; columns: ColumnInfo[]; tableName: string }
+    >()
 
-    // First pass: Create nodes and calculate positions
     schemas.forEach((schema) => {
       schema.tables.forEach((table) => {
-        const tableKey = `${schema.name}.${table.name}`
-        const tableHeight = TABLE_HEADER_HEIGHT + table.columns.length * TABLE_HEIGHT_PER_COLUMN
-
-        // Position calculation with simple grid layout
-        if (tablesInRow >= MAX_TABLES_PER_ROW) {
-          currentX = 0
-          currentY += maxHeightInRow + ROW_GAP
-          maxHeightInRow = 0
-          tablesInRow = 0
-        }
-
-        tablePositions.set(tableKey, { x: currentX, y: currentY })
-        maxHeightInRow = Math.max(maxHeightInRow, tableHeight)
-        currentX += COLUMN_GAP
-        tablesInRow++
-
-        nodes.push({
-          id: tableKey,
-          type: 'tableNode',
-          position: { x: tablePositions.get(tableKey)!.x, y: tablePositions.get(tableKey)!.y },
-          data: {
-            label: table.name,
-            schemaName: schema.name,
-            columns: table.columns
-          }
+        const key = `${schema.name}.${table.name}`
+        const height = 70 + Math.min(table.columns.length, 12) * 28 // Cap visible columns
+        tableHeights.set(key, height)
+        tableDataMap.set(key, {
+          schemaName: schema.name,
+          tableName: table.name,
+          columns: table.columns
         })
       })
     })
 
-    // Second pass: Create edges for foreign keys
+    // Find connected components (clusters)
+    const components = findConnectedComponents(graph)
+
+    // Layout each cluster
+    const clusterLayouts: { layout: ClusterLayout; component: string[]; colorIndex: number }[] = []
+
+    components.forEach((component, index) => {
+      const layout = layoutCluster(component, graph, tableHeights)
+      clusterLayouts.push({
+        layout,
+        component,
+        colorIndex: index % CLUSTER_COLORS.length
+      })
+    })
+
+    // Position clusters in a grid
+    const CLUSTER_GAP = 150
+    let currentX = 0
+    let currentY = 0
+    let rowMaxHeight = 0
+    let clustersInRow = 0
+    const MAX_CLUSTERS_PER_ROW = 3
+    const clusterOffsets = new Map<number, { x: number; y: number }>()
+
+    clusterLayouts.forEach((cluster, index) => {
+      const { bounds } = cluster.layout
+
+      if (clustersInRow >= MAX_CLUSTERS_PER_ROW) {
+        currentX = 0
+        currentY += rowMaxHeight + CLUSTER_GAP
+        rowMaxHeight = 0
+        clustersInRow = 0
+      }
+
+      clusterOffsets.set(index, { x: currentX - bounds.x, y: currentY - bounds.y })
+      currentX += bounds.width + CLUSTER_GAP
+      rowMaxHeight = Math.max(rowMaxHeight, bounds.height)
+      clustersInRow++
+    })
+
+    // Create nodes for each table with cluster-aware positioning
+    clusterLayouts.forEach((cluster, clusterIndex) => {
+      const { layout, component } = cluster
+      const color = CLUSTER_COLORS[cluster.colorIndex]
+      const offset = clusterOffsets.get(clusterIndex)!
+
+      // Add cluster background node for multi-table clusters
+      if (component.length > 1) {
+        const bounds = layout.bounds
+        nodes.push({
+          id: `cluster-${clusterIndex}`,
+          type: 'clusterNode',
+          position: { x: bounds.x + offset.x, y: bounds.y + offset.y },
+          data: {
+            label: `Cluster ${clusterIndex + 1}`,
+            tableCount: component.length,
+            color
+          },
+          style: {
+            width: bounds.width,
+            height: bounds.height,
+            zIndex: -1
+          },
+          selectable: false,
+          draggable: false
+        })
+      }
+
+      // Add table nodes
+      component.forEach((tableKey) => {
+        const pos = layout.tables.get(tableKey)!
+        const tableData = tableDataMap.get(tableKey)!
+        const relationshipCount = graph.edgeCounts.get(tableKey) || 0
+        const isHub = tableKey === layout.hub && component.length > 1
+
+        nodes.push({
+          id: tableKey,
+          type: 'tableNode',
+          position: { x: pos.x + offset.x, y: pos.y + offset.y },
+          data: {
+            label: tableData.tableName,
+            schemaName: tableData.schemaName,
+            columns: tableData.columns,
+            isHub,
+            clusterColor: color,
+            relationshipCount
+          },
+          zIndex: 1
+        })
+      })
+    })
+
+    // Create edges for foreign keys
     schemas.forEach((schema) => {
       schema.tables.forEach((table) => {
         const sourceTableKey = `${schema.name}.${table.name}`
@@ -154,8 +497,13 @@ export function ERDVisualization({ schemas }: ERDVisualizationProps) {
           if (column.foreignKey) {
             const targetTableKey = `${column.foreignKey.referencedSchema}.${column.foreignKey.referencedTable}`
 
-            // Only create edge if target table exists in our schema
-            if (tablePositions.has(targetTableKey)) {
+            if (tableDataMap.has(targetTableKey)) {
+              // Find cluster color for this edge
+              const clusterIndex = clusterLayouts.findIndex((c) =>
+                c.component.includes(sourceTableKey)
+              )
+              const edgeColor = clusterIndex >= 0 ? CLUSTER_COLORS[clusterIndex % CLUSTER_COLORS.length] : '#6366f1'
+
               edges.push({
                 id: `${sourceTableKey}.${column.name}->${targetTableKey}.${column.foreignKey.referencedColumn}`,
                 source: sourceTableKey,
@@ -163,15 +511,25 @@ export function ERDVisualization({ schemas }: ERDVisualizationProps) {
                 target: targetTableKey,
                 targetHandle: `${column.foreignKey.referencedColumn}-target`,
                 type: 'smoothstep',
-                animated: true,
-                style: { stroke: '#3b82f6', strokeWidth: 2 },
+                animated: false,
+                style: {
+                  stroke: edgeColor,
+                  strokeWidth: 2,
+                  opacity: 0.7
+                },
                 markerEnd: {
                   type: MarkerType.ArrowClosed,
-                  color: '#3b82f6'
+                  color: edgeColor,
+                  width: 20,
+                  height: 20
                 },
                 label: column.foreignKey.constraintName,
-                labelStyle: { fontSize: 10, fill: '#888' },
-                labelBgStyle: { fill: 'var(--background)', fillOpacity: 0.8 }
+                labelStyle: { fontSize: 9, fill: '#888', fontWeight: 500 },
+                labelBgStyle: {
+                  fill: 'var(--background)',
+                  fillOpacity: 0.9
+                },
+                labelBgPadding: [4, 2] as [number, number]
               })
             }
           }
@@ -192,36 +550,74 @@ export function ERDVisualization({ schemas }: ERDVisualizationProps) {
   if (schemas.length === 0 || initialNodes.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
-        No tables found to visualize
+        <div className="text-center space-y-2">
+          <GitBranch className="size-12 mx-auto opacity-20" />
+          <p>No tables found to visualize</p>
+        </div>
       </div>
     )
   }
 
+  // Calculate stats for header
+  const tableCount = initialNodes.filter((n) => n.type === 'tableNode').length
+  const clusterCount = initialNodes.filter((n) => n.type === 'clusterNode').length
+  const relationshipCount = initialEdges.length
+
   return (
-    <div className="w-full h-full">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onInit={onInit}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
-        minZoom={0.1}
-        maxZoom={2}
-        defaultEdgeOptions={{
-          type: 'smoothstep'
-        }}
-      >
-        <Background color="#888" gap={20} size={1} />
-        <Controls />
-        <MiniMap
-          nodeColor={() => 'var(--primary)'}
-          maskColor="rgba(0, 0, 0, 0.2)"
-          className="!bg-background/80"
-        />
-      </ReactFlow>
+    <div className="w-full h-full flex flex-col">
+      {/* Stats bar */}
+      <div className="flex items-center gap-6 px-4 py-2 border-b border-border/40 bg-muted/30 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-primary/60" />
+          {tableCount} table{tableCount !== 1 ? 's' : ''}
+        </span>
+        {clusterCount > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-indigo-500/60" />
+            {clusterCount + (tableCount - clusterCount > clusterCount ? tableCount - clusterCount - clusterCount : 0)} cluster{clusterCount !== 1 ? 's' : ''}
+          </span>
+        )}
+        <span className="flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-amber-500/60" />
+          {relationshipCount} relationship{relationshipCount !== 1 ? 's' : ''}
+        </span>
+        <span className="ml-auto opacity-70">
+          Tables grouped by relationships • Hub tables centered
+        </span>
+      </div>
+
+      <div className="flex-1">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onInit={onInit}
+          nodeTypes={nodeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.15, maxZoom: 1.2 }}
+          minZoom={0.05}
+          maxZoom={2}
+          defaultEdgeOptions={{
+            type: 'smoothstep'
+          }}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background color="#888" gap={24} size={1} />
+          <Controls className="!bg-background/90 !border-border !rounded-lg !shadow-lg" />
+          <MiniMap
+            nodeColor={(node) => {
+              if (node.type === 'clusterNode') return 'transparent'
+              const data = node.data as TableNodeData
+              return data.clusterColor || 'var(--primary)'
+            }}
+            maskColor="rgba(0, 0, 0, 0.25)"
+            className="!bg-background/80 !border-border !rounded-lg"
+            pannable
+            zoomable
+          />
+        </ReactFlow>
+      </div>
     </div>
   )
 }
