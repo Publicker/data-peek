@@ -22,7 +22,7 @@ Download the latest release for your platform from [Releases](https://github.com
 
 - **macOS**: `.dmg` (Intel & Apple Silicon)
 - **Windows**: `.exe` installer
-- **Linux**: `.AppImage` or `.deb`
+- **Linux**: `.AppImage`, `.deb`, or `.tar.gz` (Arch)
 
 ### macOS: "App is damaged" Fix
 
