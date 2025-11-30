@@ -44,8 +44,6 @@ appImage:
   artifactName: ${productName}-${version}-${arch}.${ext}
 deb:
   artifactName: ${productName}-${version}-${arch}.${ext}
-tar:
-  artifactName: ${productName}-${version}-${arch}.${ext}
 npmRebuild: false
 publish:
   provider: github
