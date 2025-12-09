@@ -1,21 +1,20 @@
-import { describe, it, expect } from 'vitest'
-import {
-  buildCreateTable,
-  buildCreateIndex,
-  buildDropTable,
-  buildAlterTable,
-  buildPreviewDDL,
-  buildAlterPreviewDDL,
-  validateTableDefinition
-} from '../ddl-builder'
 import type {
-  TableDefinition,
+  AlterTableBatch,
   ColumnDefinition,
   ConstraintDefinition,
   IndexDefinition,
-  AlterTableBatch,
-  DatabaseType
+  TableDefinition
 } from '@data-peek/shared'
+import { describe, expect, it } from 'vitest'
+import {
+  buildAlterPreviewDDL,
+  buildAlterTable,
+  buildCreateIndex,
+  buildCreateTable,
+  buildDropTable,
+  buildPreviewDDL,
+  validateTableDefinition
+} from '../ddl-builder'
 
 // Test fixtures
 const createColumn = (overrides: Partial<ColumnDefinition> = {}): ColumnDefinition => ({
@@ -32,9 +31,28 @@ const createTableDef = (overrides: Partial<TableDefinition> = {}): TableDefiniti
   schema: 'public',
   name: 'users',
   columns: [
-    createColumn({ id: 'col-1', name: 'id', dataType: 'integer', isNullable: false, isPrimaryKey: true }),
-    createColumn({ id: 'col-2', name: 'name', dataType: 'varchar', length: 100, isNullable: false }),
-    createColumn({ id: 'col-3', name: 'email', dataType: 'varchar', length: 255, isNullable: false, isUnique: true }),
+    createColumn({
+      id: 'col-1',
+      name: 'id',
+      dataType: 'integer',
+      isNullable: false,
+      isPrimaryKey: true
+    }),
+    createColumn({
+      id: 'col-2',
+      name: 'name',
+      dataType: 'varchar',
+      length: 100,
+      isNullable: false
+    }),
+    createColumn({
+      id: 'col-3',
+      name: 'email',
+      dataType: 'varchar',
+      length: 255,
+      isNullable: false,
+      isUnique: true
+    }),
     createColumn({ id: 'col-4', name: 'created_at', dataType: 'timestamp', defaultValue: 'now()' })
   ],
   constraints: [],
@@ -346,7 +364,7 @@ describe('buildCreateTable', () => {
       const tableDef = createTableDef({ comment: 'User accounts table' })
       const result = buildCreateTable(tableDef, 'postgresql')
 
-      expect(result.sql).toContain("COMMENT ON TABLE")
+      expect(result.sql).toContain('COMMENT ON TABLE')
       expect(result.sql).toContain("'User accounts table'")
     })
 
@@ -613,9 +631,7 @@ describe('buildAlterTable', () => {
       })
       const results = buildAlterTable(batch, 'postgresql')
 
-      expect(results[0].sql).toBe(
-        'ALTER TABLE "users" RENAME COLUMN "old_name" TO "new_name";'
-      )
+      expect(results[0].sql).toBe('ALTER TABLE "users" RENAME COLUMN "old_name" TO "new_name";')
     })
 
     it('should change column type', () => {
@@ -624,9 +640,7 @@ describe('buildAlterTable', () => {
       })
       const results = buildAlterTable(batch, 'postgresql')
 
-      expect(results[0].sql).toBe(
-        'ALTER TABLE "users" ALTER COLUMN "amount" TYPE numeric(10,2);'
-      )
+      expect(results[0].sql).toBe('ALTER TABLE "users" ALTER COLUMN "amount" TYPE numeric(10,2);')
     })
 
     it('should change column type with USING', () => {
@@ -669,7 +683,9 @@ describe('buildAlterTable', () => {
       })
       const results = buildAlterTable(batch, 'postgresql')
 
-      expect(results[0].sql).toBe("ALTER TABLE \"users\" ALTER COLUMN \"status\" SET DEFAULT 'active';")
+      expect(results[0].sql).toBe(
+        'ALTER TABLE "users" ALTER COLUMN "status" SET DEFAULT \'active\';'
+      )
     })
 
     it('should drop default value', () => {
@@ -683,7 +699,9 @@ describe('buildAlterTable', () => {
 
     it('should set column comment', () => {
       const batch = createBatch({
-        columnOperations: [{ type: 'set_comment', columnName: 'email', comment: 'User email address' }]
+        columnOperations: [
+          { type: 'set_comment', columnName: 'email', comment: 'User email address' }
+        ]
       })
       const results = buildAlterTable(batch, 'postgresql')
 
@@ -747,9 +765,7 @@ describe('buildAlterTable', () => {
       })
       const results = buildAlterTable(batch, 'postgresql')
 
-      expect(results[0].sql).toBe(
-        'ALTER TABLE "users" RENAME CONSTRAINT "old_name" TO "new_name";'
-      )
+      expect(results[0].sql).toBe('ALTER TABLE "users" RENAME CONSTRAINT "old_name" TO "new_name";')
     })
   })
 
@@ -963,10 +979,7 @@ describe('validateTableDefinition', () => {
 
   it('should reject duplicate column names case-insensitively', () => {
     const tableDef = createTableDef({
-      columns: [
-        createColumn({ id: '1', name: 'Name' }),
-        createColumn({ id: '2', name: 'name' })
-      ]
+      columns: [createColumn({ id: '1', name: 'Name' }), createColumn({ id: '2', name: 'name' })]
     })
     const result = validateTableDefinition(tableDef)
 

@@ -424,7 +424,7 @@ export async function validateAPIKey(
     await generateText({
       model,
       prompt: 'Say "ok"',
-      maxTokens: 5
+      maxOutputTokens: 5
     })
 
     return { valid: true }
